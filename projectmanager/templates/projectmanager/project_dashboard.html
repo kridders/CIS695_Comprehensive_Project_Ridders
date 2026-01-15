@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Project Dashboard</title>
+</head>
+<body>
+<h1>{{project.title}}</h1>
+<p><strong>Project Goal:</strong> {{project.goal }}</p>
+
+<h2>Select Project</h2>
+
+<ul>
+    {% for p in projects %}
+        <li>
+            <a href="{% url 'project_dashboard' p.id %}">
+                {{ p.title}}
+            </a>
+        </li>
+    {% endfor %}
+</ul>
+
+<hr>
+
+
+
+<p>
+    <a href="{% url 'create_project' %}">➕ Add New Project</a>
+    &nbsp;|&nbsp;
+    <a href="{% url 'create_task' project.id %}">➕ Add New Task</a>
+</p>
+<hr>
+
+<h2>Tasks</h2>
+
+<table border="1" cellpadding="5">
+    <tr>
+        <th>Task</th>
+        <th>Assigned To</th>
+        <th>Deadline</th>
+        <th>Status</th>
+    </tr>
+
+    {% for task in tasks %}
+    <tr>
+        <td>{{ task.title}}</td>
+        <td>
+            {% if task.assigned_to %}
+                {{ task.assigned_to.name }}
+            {% else %}
+                Unassigned
+            {% endif %}
+        </td>
+        <td>{{ task.deadline }}</td>
+        <td>
+            <form method="post" action="{% url 'update_task_status' task.id %}">
+                {% csrf_token %}
+                <select name="status" onchange="this.form.submit()">
+                    {% for key, value in task.STATUS_CHOICES %}
+                        <option value="{{ key }}" {% if task.status == key %}selected{% endif %}>
+                            {{ value }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </form>
+        </td>
+    </tr>
+    {% empty %}
+    <tr>
+        <td colspan="4">No tasks available.</td>
+    </tr>
+    {% endfor %}
+</table>
+
+<hr>
+
+<h2>Recent Updates</h2>
+<ul>
+    {% for update in updates %}
+        <li> {{update.created_at }} - {{ update.text }}</li>
+    {% empty %}
+        <li>No updates yet.</li>
+    {% endfor %}
+</ul>
+
+</body>
+</html>

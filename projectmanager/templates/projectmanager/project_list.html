@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+    
+<head>
+    <title>My Projects</title>
+</head>
+
+<body>
+    
+<h1>My Projects</h1>
+
+<a href="{% url 'create_project' %}">➕ Create New Project</a>
+
+<ul>
+    {% for project in projects %}
+        <li>
+            <a href="{% url 'project_dashboard' project.id}">
+                {{ project.title }}
+            </a>
+        </li>
+    {% empty %}
+        <li>No projects yet.</li>
+    {% endfor %}
+</ul>
+</body>
+</html>
