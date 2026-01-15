@@ -52,20 +52,27 @@ def create_project(request):
     )
 
 def project_dashboard(request, project_id):
+
     project = get_object_or_404(Project, id=project_id)
+
     tasks = project.tasks.all()
+
     updates = project.updates.order_by('-created_at')[:5]
+
+    projects = Project.objects.all()
 
     context = {
         'project': project,
         'tasks': tasks,
         'updates': updates,
+        'projects': projects, 
     }
 
     return render(request, 'projectmanager/project_dashboard.html', context)
 
 def project_list(request):
     projects = Project.objects.all()
+    
     return render(
         request,
         'projectmanager/project_list.html',

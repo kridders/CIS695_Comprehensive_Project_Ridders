@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+<p>Projects variable: {{ projects }}</p>
     
 <head>
     <title>My Projects</title>
@@ -14,8 +15,7 @@
 <ul>
     {% for project in projects %}
         <li>
-            <a href="{% url 'project_dashboard' project.id}">
-                {{ project.title }}
+            <a href="{% url 'project_dashboard' project.id %}">{{ project.title }}</a>
             </a>
         </li>
     {% empty %}
