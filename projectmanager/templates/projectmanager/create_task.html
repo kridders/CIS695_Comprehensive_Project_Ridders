@@ -1,19 +1,15 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Create Task</title>
-</head>
-<body>
+{% extends 'projectmanager/base.html' %}
 
+{% block title %}Create Task{% endblock %}
+
+{% block content %}
 <h1>Create New Task</h1>
 
 <form method="post">
     {% csrf_token %}
-    {{ form.as_p}}
-
+    {{ form.as_p }}
     <button type="submit">Save Task</button>
 </form>
 
-<a href="{% url 'project_dashboard' project.id %}">Back to Dashboard</a>
-</body>
-</html>
+<a href="{% url 'project_dashboard' project.id %}">Back to Project Dashboard</a>
+{% endblock %}

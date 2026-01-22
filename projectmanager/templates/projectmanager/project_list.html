@@ -1,13 +1,8 @@
-<!DOCTYPE html>
-<html>
-<p>Projects variable: {{ projects }}</p>
-    
-<head>
-    <title>My Projects</title>
-</head>
+{% extends 'projectmanager/base.html' %}
 
-<body>
-    
+{% block title %}My Projects{% endblock %}
+
+{% block content %}
 <h1>My Projects</h1>
 
 <a href="{% url 'create_project' %}">➕ Create New Project</a>
@@ -16,11 +11,9 @@
     {% for project in projects %}
         <li>
             <a href="{% url 'project_dashboard' project.id %}">{{ project.title }}</a>
-            </a>
         </li>
     {% empty %}
         <li>No projects yet.</li>
     {% endfor %}
 </ul>
-</body>
-</html>
+{% endblock %}

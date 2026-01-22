@@ -1,27 +1,21 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Project Dashboard</title>
-</head>
-<body>
-<h1>{{project.title}}</h1>
-<p><strong>Project Goal:</strong> {{project.goal }}</p>
+{% extends 'projectmanager/base.html' %}
 
-<h2>Select Project</h2>
+{% block title %}{{ project.title }}{% endblock %}
 
+{% block content %}
+<h1>{{ project.title }}</h1>
+<p><strong>Project Goal:</strong> {{ project.goal }}</p>
+
+<h2>Switch Project</h2>
 <ul>
     {% for p in projects %}
         <li>
-            <a href="{% url 'project_dashboard' p.id %}">
-                {{ p.title}}
-            </a>
+            <a href="{% url 'project_dashboard' p.id %}">{{ p.title }}</a>
         </li>
     {% endfor %}
 </ul>
 
 <hr>
-
-
 
 <p>
     <a href="{% url 'create_project' %}">➕ Add New Project</a>
@@ -31,7 +25,6 @@
 <hr>
 
 <h2>Tasks</h2>
-
 <table border="1" cellpadding="5">
     <tr>
         <th>Task</th>
@@ -42,14 +35,8 @@
 
     {% for task in tasks %}
     <tr>
-        <td>{{ task.title}}</td>
-        <td>
-            {% if task.assigned_to %}
-                {{ task.assigned_to.name }}
-            {% else %}
-                Unassigned
-            {% endif %}
-        </td>
+        <td>{{ task.title }}</td>
+        <td>{% if task.assigned_to %}{{ task.assigned_to.name }}{% else %}Unassigned{% endif %}</td>
         <td>{{ task.deadline }}</td>
         <td>
             <form method="post" action="{% url 'update_task_status' task.id %}">
@@ -65,9 +52,7 @@
         </td>
     </tr>
     {% empty %}
-    <tr>
-        <td colspan="4">No tasks available.</td>
-    </tr>
+    <tr><td colspan="4">No tasks available.</td></tr>
     {% endfor %}
 </table>
 
@@ -76,11 +61,9 @@
 <h2>Recent Updates</h2>
 <ul>
     {% for update in updates %}
-        <li> {{update.created_at }} - {{ update.text }}</li>
+        <li>{{ update.created_at }} - {{ update.text }}</li>
     {% empty %}
         <li>No updates yet.</li>
     {% endfor %}
 </ul>
-
-</body>
-</html>
+{% endblock %}
