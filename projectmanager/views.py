@@ -1,10 +1,10 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from .models import Project, Task
-from .forms import TaskForm, ProjectForm
+from .forms import TaskForm, ProjectForm, AddMemberForm
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib import messages
-from django.db import models
+from django.contrib.auth.models import User
 from django.contrib.auth import login
 
 #View to create task
@@ -101,3 +101,22 @@ def register(request):
         form = UserCreationForm()
     
     return render(request, 'projectmanager/register.html', {'form': form})
+
+@login_required
+def add_member(request, project_id):
+    project = get_object_or_404(Project, id=project_id, members=request.user)
+
+    if request.method == 'POST':
+        form = AddMemberForm(request.POST)
+        if form.is_valid():
+            email = form.cleaned_data['email']
+
+            try:
+                user = User.objects.get(email=email)
+                project.members.add(user)
+                messages.success(request, f"{email} added to project.")
+            except User.DoesNotExist:
+                messages.error(request, "No user with this email.")
+    
+    return redirect('project_dashboard', project_id = project.id)
+                

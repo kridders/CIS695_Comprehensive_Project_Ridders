@@ -19,3 +19,7 @@ class  ProjectForm(forms.ModelForm):
     class Meta:
         model = Project
         fields = ['title', 'goal', 'start_date', 'end_date']
+
+class AddMemberForm(forms.Form):
+    email = forms.EmailField(label="User email")
+    
