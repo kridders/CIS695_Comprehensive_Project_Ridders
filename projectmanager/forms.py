@@ -5,7 +5,7 @@ class TaskForm(forms.ModelForm):
     class Meta:
         model = Task
         fields = ['title', 'description', 'deadline', 'status', 'assigned_to']
-
+        widgets = {'deadline': forms.DateInput(attrs={'type': 'date'})}
     def __init__(self, *args, **kwargs):
         project = kwargs.pop('project', None)  # Projekt wird übergeben
         super().__init__(*args, **kwargs)
