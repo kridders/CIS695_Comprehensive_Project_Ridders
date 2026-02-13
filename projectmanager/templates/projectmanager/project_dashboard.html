@@ -1,4 +1,6 @@
 {% extends 'projectmanager/base.html' %}
+{% load project_extras %}
+
 
 {% block title %}{{ project.title }}{% endblock %}
 
@@ -6,20 +8,35 @@
 <h1>{{ project.title }}</h1>
 <p><strong>Project Goal:</strong> {{ project.goal }}</p>
 
-<h3>Members</h3>
+
+<h3>Team</h3>
 <ul>
-    {% for member in project.members.all %}
-        <li>{{ member.username }} ({{member.email }})</li>
-    {% endfor %}
+{% for member in memberships %}
+    <li>
+        {{ member.user.username }} ({{ member.role }})
+        
+        {% if user_role == "ADMIN" and member.user != request.user %}
+            <form method="post" action="{% url 'remove_member' project.id member.user.id %}" style="display:inline;">
+                {% csrf_token %}
+                <button style="color:red;">Remove</button>
+            </form>
+        {% endif %}
+    </li>
+{% empty %}
+    <li>No team members yet.</li>
+{% endfor %}
 </ul>
 
+{% if user_role == "ADMIN" %}
+    <h3>Add Member</h3>
+    <form method="post" action="{% url 'add_member' project.id %}">
+        {% csrf_token %}
+        <input type="email" name="email" placeholder="user@example.com" required>
+        <button type="submit">Invite</button>
+    </form>
+{% endif %}
 
-<h3>Add member</h3>
-<form method="post" action="{% url 'add_member' project.id %}">
-    {% csrf_token %}
-    <input type="email" name="email" placeholder="user@email.com" required>
-    <button type="submit">Add</button>
-</form>
+
 
 <h2>Switch Project</h2>
 <ul>

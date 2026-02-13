@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.conf import settings
 
 # Create your models here.
 class Project(models.Model):
@@ -8,7 +9,11 @@ class Project(models.Model):
     start_date = models.DateField()
     end_date = models.DateField()
 
-    members = models.ManyToManyField(User, related_name='projects')
+    members = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, 
+        through="ProjectMembership",
+        related_name='projects'
+    )
 
     def __str__(self):
         return self.title
@@ -21,7 +26,20 @@ class TeamMember(models.Model):
 
     def __str__(self):
         return self.name
-    
+
+
+class ProjectInvitation(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="invitations")
+    email = models.EmailField()
+    invited_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="sent_invitations")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name="project_invitations")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    accepted = models.BooleanField(null=True)  
+
+    def __str__(self):
+        return f"{self.email} -> {self.project.title}"
+
 class Task(models.Model):
     STATUS_CHOICES = [
         ('TODO', 'To Do'),
@@ -56,6 +74,22 @@ class Document(models.Model):
 
     def __str__(self):
         return self.title
+
+   
+class ProjectMembership(models.Model):
+    ROLE_CHOICES = [
+        ('ADMIN', 'Admin'),
+        ('MEMBER', 'Member'),
+    ]
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='memberships')
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='MEMBER')
+
+    class Meta:
+        unique_together = ('user', 'project')
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.project.title} ({self.role})"
     
 class AISuggestion(models.Model):
     SUGGESTION_TYPE_CHOICES = [

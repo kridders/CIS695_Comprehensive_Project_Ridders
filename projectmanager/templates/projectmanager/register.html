@@ -1,11 +1,67 @@
-<h1>Register</h1>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Register - CourseCrew</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f6f8;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .register-container {
+            background-color: white;
+            padding: 2rem 3rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            width: 350px;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            color: #333;
+        }
+        form button {
+            width: 100%;
+            padding: 0.6rem;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 1rem;
+        }
+        form button:hover {
+            background-color: #1e7e34;
+        }
+        p {
+            text-align: center;
+            margin-top: 1rem;
+        }
+        a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="register-container">
+        <h1>Register</h1>
 
-<form method="post">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Register</button>
-</form>
+        <form method="post">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button type="submit">Register</button>
+        </form>
 
-<p>
-    Already have an account? <a href="{% url 'login' %}">Login here</a>
-</p>
+        <p>
+            Already have an account? <a href="{% url 'login' %}">Login here</a>
+        </p>
+    </div>
+</body>
+</html>

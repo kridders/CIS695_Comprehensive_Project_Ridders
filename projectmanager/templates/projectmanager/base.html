@@ -1,26 +1,151 @@
+{% load static %}
 <!DOCTYPE html>
 <html>
 <head>
-    <title>{% block title %}Project Manager{% endblock %}</title>
+    <title>{% block title %}CourseCrew{% endblock %}</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="{% static 'projectmanager/img/favicon.ico' %}">
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f4f6f8;
+        }
+
+        header {
+            background: #1f2933;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .header-left img {
+            height: 36px;   /* Logo-Größe */
+            width: auto;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .notification {
+            position: relative;
+            cursor: pointer;
+            font-size: 18px;
+        }
+
+        .badge {
+            position: absolute;
+            top: -6px;
+            right: -10px;
+            background: red;
+            color: white;
+            font-size: 12px;
+            padding: 2px 6px;
+            border-radius: 50%;
+        }
+
+        .dropdown {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 30px;
+            background: white;
+            color: black;
+            min-width: 250px;
+            border: 1px solid #ccc;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            z-index: 100;
+        }
+
+        .notification:hover .dropdown {
+            display: block;
+        }
+
+        .dropdown-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            font-size: 14px;
+        }
+
+        .dropdown-item:last-child {
+            border-bottom: none;
+        }
+
+        main {
+            padding: 20px;
+        }
+
+        a {
+            color: #2563eb;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
 </head>
 <body>
-    <header>
-        {% if user.is_authenticated %}
-            Logged in as {{ user.username }} |
-        <form method="post" action="{% url 'logout' %}">
-            {% csrf_token %}
-            <button type="submit">Logout</button>
-        </form>
-        {% else %}
-            <a href="{% url 'login' %}">Login</a> |
-            <a href="{% url 'register' %}">Register</a>
-        {% endif %}
-    </header>
 
-    <hr>
+<header>
+    <div class="header-left">
+        <!-- Logo -->
+        <img src="{% static 'projectmanager/img/web-app-manifest-512x512.png' %}" alt="CourseCrew Logo">
+        <span>CourseCrew</span>
+    </div>
 
-    {% block content %}
-    {% endblock %}
+    <div class="header-right">
+        <!-- Notifications -->
+            <div class="notification">
+    🔔
+    {% if pending_invitations %}
+        <span class="badge">{{ pending_invitations|length }}</span>
+    {% endif %}
+    <div class="dropdown">
+        {% for inv in pending_invitations %}
+            <div class="dropdown-item">
+                Einladung zu <strong>{{ inv.project.title }}</strong> von {{ inv.invited_by.username }}
+                <br>
+                <a href="{% url 'accept_invitation' inv.id %}">Accept</a> |
+                <a href="{% url 'decline_invitation' inv.id %}">Decline</a>
+            </div>
+        {% empty %}
+            <div class="dropdown-item">No new invitations</div>
+        {% endfor %}
+    </div>
+</div>
+
+        <!-- User -->
+        <div>
+            Logged in as <strong>{{ request.user.username }}</strong> |
+            <form method="post" action="{% url 'logout' %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" style="background:none; border:none; color:white; cursor:pointer;">
+                    Logout
+                </button>
+            </form>
+        </div>
+    </div>
+</header>
+
+<main>
+    {% block content %}{% endblock %}
+</main>
 
 </body>
 </html>

@@ -21,5 +21,12 @@ urlpatterns = [
     path('register/', views.register, name='register'),
 
     #Add project members
-    path('projects/<int:project_id>/add-member/', views.add_member, name='add_member')
+    path('projects/<int:project_id>/add-member/', views.add_member, name='add_member'),
+
+    #Accept / Deline invitations
+    path("invitations/accept/<int:invitation_id>/", views.accept_invitation, name="accept_invitation"),
+    path("invitations/decline/<int:invitation_id>/", views.decline_invitation, name="decline_invitation"),
+
+    #Remove Members from projects
+    path('projects/<int:project_id>/remove/<int:user_id>/',views.remove_member, name='remove_member')
 ]
