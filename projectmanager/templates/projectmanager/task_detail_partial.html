@@ -1,0 +1,76 @@
+{% load static %}
+{% load filename_filters %}
+<link rel="stylesheet" type="text/css" href="{% static 'projectmanager/css/modal.css' %}">
+<h2>{{ task.title }}</h2>
+<p>Assigned To: {% if task.assigned_to %}{{ task.assigned_to.username }}{% else %}Unassigned{% endif %}</p>
+<p>Status: {{ task.status }}</p>
+<p>Deadline: {{ task.deadline }}</p>
+
+<h3>Comments</h3>
+<ul>
+    {% for comment in task.comments.all %}
+        <li>{{ comment.user.username }}: {{ comment.text }}</li>
+    {% empty %}
+        <li>No comments yet.</li>
+    {% endfor %}
+</ul>
+
+<form method="post" action="{% url 'add_task_comment' task.id %}">
+    {% csrf_token %}
+    <textarea name="text"></textarea>
+    <button type="submit">Add Comment</button>
+</form>
+
+<h3>Attachments</h3>
+<form id="upload-attachment-form" method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <input type="file" name="file" required>
+    <button type="submit">Upload</button>
+</form>
+
+<ul class="attachment-list">
+    {% for attachment in task.attachments.all %}
+        <li style="margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: space-between;">
+            
+            <span style="display:flex; align-items:center; max-width: calc(100% - 50px);">
+                
+                <!-- Icon basierend auf Dateiendung -->
+                {% with ext=attachment.file.name|slice:"-4:"|lower %}
+                    {% if ext == ".pdf" %}
+                        📄
+                    {% elif ext == ".doc" or ext == "docx" %}
+                        📝
+                    {% elif ext == ".ppt" or ext == "pptx" %}
+                        📊
+                    {% elif ext == ".xls" or ext == "xlsx" %}
+                        📈
+                    {% elif ext == ".jpg" or ext == ".png" or ext == ".gif" %}
+                        🖼️
+                    {% else %}
+                        📎
+                    {% endif %}
+                {% endwith %}
+
+                <!-- Sauberer Dateiname, jetzt anklickbar zum Download -->
+                <a href="{{ attachment.file.url }}" download 
+                   class="attachment-name" 
+                   style="margin-left:0.3rem; word-break: break-word; text-decoration:none; color:#333;">
+                    {{ attachment.file.name|basename_noext }}
+                </a>
+
+            </span>
+
+            <!-- Delete Button -->
+            <button type="button" 
+                    class="delete-attachment-btn" 
+                    data-attachment-id="{{ attachment.id }}" 
+                    style="border:none; background:none; cursor:pointer; color:red;" 
+                    title="Delete Attachment">
+                🗑️
+            </button>
+
+        </li>
+    {% empty %}
+        <li>No attachments yet.</li>
+    {% endfor %}
+</ul>

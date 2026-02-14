@@ -1,5 +1,7 @@
 from django.urls import path
 from . import views
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     # Homepage: A logged in user sees all of his projects
@@ -28,5 +30,27 @@ urlpatterns = [
     path("invitations/decline/<int:invitation_id>/", views.decline_invitation, name="decline_invitation"),
 
     #Remove Members from projects
-    path('projects/<int:project_id>/remove/<int:user_id>/',views.remove_member, name='remove_member')
+    path('projects/<int:project_id>/remove/<int:user_id>/',views.remove_member, name='remove_member'),
+
+    #Change roles of Team Members
+    path('projects/<int:project_id>/change_role/<int:user_id>/', views.change_role, name="change_role"),
+
+    #Delete Task
+    path('tasks/<int:task_id>/delete/', views.delete_task, name='delete_task'),
+
+    #Task Details
+    path('tasks/<int:task_id>/', views.task_detail, name='task_detail'),
+
+    #Add Comments
+    path('tasks/<int:task_id>/add_comment/', views.add_task_comment, name='add_task_comment'),
+
+    #Add Attachment
+    path('tasks/<int:task_id>/add_attachment/', views.add_task_attachment, name='add_task_attachment'),
+
+    #Delete Attachment
+    path('attachments/<int:attachment_id>/delete/', views.delete_task_attachment, name='delete_task_attachment')
+
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root= settings.MEDIA_ROOT)

@@ -2,25 +2,40 @@
 {% load project_extras %}
 
 
+
 {% block title %}{{ project.title }}{% endblock %}
 
 {% block content %}
 <h1>{{ project.title }}</h1>
 <p><strong>Project Goal:</strong> {{ project.goal }}</p>
 
+{{ member.user }} - {{ member.user.id }}
 
 <h3>Team</h3>
 <ul>
 {% for member in memberships %}
     <li>
         {{ member.user.username }} ({{ member.role }})
-        
-        {% if user_role == "ADMIN" and member.user != request.user %}
+
+        {% if user_role == "ADMIN" and member.user and member.user != request.user %}
+            <!-- Remove -->
             <form method="post" action="{% url 'remove_member' project.id member.user.id %}" style="display:inline;">
                 {% csrf_token %}
                 <button style="color:red;">Remove</button>
             </form>
+
+            <!-- Change Role -->
+            <form method="post" action="{% url 'change_role' project.id member.user.id %}" style="display:inline; margin-left: 0.5rem;">
+                {% csrf_token %}
+                <select name="role">
+                    <option value="ADMIN" {% if member.role == "ADMIN" %}selected{% endif %}>Admin</option>
+                    <option value="MEMBER" {% if member.role == "MEMBER" %}selected{% endif %}>Member</option>
+                    <option value="VIEWER" {% if member.role == "VIEWER" %}selected{% endif %}>Viewer</option>
+                </select>
+                <button>Update</button>
+            </form>
         {% endif %}
+
     </li>
 {% empty %}
     <li>No team members yet.</li>
@@ -38,6 +53,8 @@
 
 
 
+
+
 <h2>Switch Project</h2>
 <ul>
     {% for p in projects %}
@@ -49,13 +66,16 @@
 
 <hr>
 
+{% if user_role != "VIEWER" %}
 <p>
     <a href="{% url 'create_project' %}">➕ Add New Project</a>
     &nbsp;|&nbsp;
     <a href="{% url 'create_task' project.id %}">➕ Add New Task</a>
 </p>
+{% endif %}
 <hr>
 
+<!-- Tasks-Tabelle bleibt wie vorher -->
 <h2>Tasks</h2>
 <table border="1" cellpadding="5">
     <tr>
@@ -63,30 +83,207 @@
         <th>Assigned To</th>
         <th>Deadline</th>
         <th>Status</th>
+        <th></th> <!-- Delete -->
     </tr>
-
     {% for task in tasks %}
     <tr>
-        <td>{{ task.title }}</td>
-        <td>{% if task.assigned_to %}{{ task.assigned_to.name }}{% else %}Unassigned{% endif %}</td>
-        <td>{{ task.deadline }}</td>
         <td>
-            <form method="post" action="{% url 'update_task_status' task.id %}">
+            <!-- Task-Detail Modal Trigger -->
+            <a href="#" class="open-task-modal" data-task-id="{{ task.id }}">
+                {{ task.title }}
+            </a>
+        </td>
+        {% if task.assigned_to %}
+        <td>{{ task.assigned_to.username  }}
+        {% else %}
+            Unassigned
+        {% endif %}
+        </td>
+        <td>{{ task.deadline }}</td>
+        <td>{{ task.status }}</td>
+        <td>
+            {% if task.assigned_to == request.user %}
+            <form method="post" action="{% url 'delete_task' task.id %}" style="display:inline;">
                 {% csrf_token %}
-                <select name="status" onchange="this.form.submit()">
-                    {% for key, value in task.STATUS_CHOICES %}
-                        <option value="{{ key }}" {% if task.status == key %}selected{% endif %}>
-                            {{ value }}
-                        </option>
-                    {% endfor %}
-                </select>
+                <button type="submit" style="border:none; background:none; cursor:pointer;" title="Delete Task">
+                    🗑️
+                </button>
             </form>
+            {% endif %}
         </td>
     </tr>
-    {% empty %}
-    <tr><td colspan="4">No tasks available.</td></tr>
     {% endfor %}
 </table>
+
+<!-- Modal -->
+<div id="taskModal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <span class="close">&times;</span>
+        <div id="modal-body">
+            <!-- Task details werden hier per JS reingeladen -->
+        </div>
+    </div>
+</div>
+
+<!-- Einfache Styles für Modal -->
+<style>
+.modal {
+    position: fixed;
+    z-index: 1000;
+    left: 0; top: 0; width: 100%; height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.5); /* Hintergrund verblassen */
+}
+.modal-content {
+    background-color: #fff;
+    margin: 10% auto;
+    padding: 20px;
+    border-radius: 10px;
+    width: 50%;
+}
+.close {
+    float: right;
+    font-size: 24px;
+    cursor: pointer;
+}
+</style>
+
+<script>
+const modal = document.getElementById('taskModal');
+const modalBody = document.getElementById('modal-body');
+const closeBtn = document.querySelector('.close');
+
+document.querySelectorAll('.open-task-modal').forEach(link => {
+    link.addEventListener('click', function(e) {
+        e.preventDefault();
+        const taskId = this.dataset.taskId;
+
+        // Fetch Task-Detail via AJAX
+        fetch(`/tasks/${taskId}/?ajax=1`)
+            .then(res => res.text())
+            .then(html => {
+                modalBody.innerHTML = html;
+                modal.style.display = 'block';
+
+                // ===== Upload-Form im Modal binden =====
+                const uploadForm = modalBody.querySelector('#upload-attachment-form');
+                if (uploadForm) {
+                    uploadForm.addEventListener('submit', function(e) {
+                        e.preventDefault();
+                        const formData = new FormData(this);
+
+                        fetch(`/tasks/${taskId}/add_attachment/?ajax=1`, {
+                            method: 'POST',
+                            body: formData,
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest'
+                            }
+                        })
+                        .then(res => res.text())
+                        .then(html => {
+                            // Neues Attachment zur Liste hinzufügen
+                            const attachmentList = modalBody.querySelector('#attachment-list');
+                            if (attachmentList) {
+                                attachmentList.insertAdjacentHTML('beforeend', html);
+                            }
+                            this.reset(); // Formular zurücksetzen
+                        });
+                    });
+                }
+                // =======================================
+            });
+    });
+});
+
+// Schließen-Button
+closeBtn.onclick = function() {
+    modal.style.display = 'none';
+}
+
+// Klick außerhalb des Modals schließt es
+window.onclick = function(event) {
+    if (event.target == modal) {
+        modal.style.display = 'none';
+    }
+}
+
+document.addEventListener('click', function(e) {
+    if(e.target && e.target.classList.contains('delete-attachment-btn')) {
+        const attachmentId = e.target.dataset.attachmentId;
+        if(confirm('Are you sure you want to delete this file?')) {
+            fetch(`/attachments/${attachmentId}/delete/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken'),
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.success) {
+                    // Entferne die Zeile aus der Liste
+                    const li = e.target.closest('li');
+                    li.remove();
+                } else {
+                    alert('Failed to delete attachment.');
+                }
+            });
+        }
+    }
+});
+
+// Helper-Funktion um CSRF Cookie auszulesen
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+            cookie = cookie.trim();
+            if (cookie.startsWith(name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+const uploadForm = document.getElementById('upload-attachment-form');
+if (uploadForm) {
+    uploadForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(uploadForm);
+        const taskId = uploadForm.closest('#taskModal').dataset.taskId;
+
+        fetch(`/tasks/${taskId}/attachments/add/`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.success) {
+                // Füge neue Zeile direkt in die Liste ein
+                const attachmentList = document.querySelector('.attachment-list');
+                attachmentList.insertAdjacentHTML('beforeend', data.html);
+
+                // Optional: Form zurücksetzen
+                uploadForm.reset();
+            } else {
+                alert('Upload failed');
+            }
+        })
+        .catch(err => console.error(err));
+    });
+}
+
+
+</script>
+
+
 
 <hr>
 

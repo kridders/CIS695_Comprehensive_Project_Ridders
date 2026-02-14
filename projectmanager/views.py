@@ -1,11 +1,13 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from .models import Project, Task, ProjectInvitation, ProjectMembership
-from .forms import TaskForm, ProjectForm, AddMemberForm, CustomUserCreationForm
+from .models import Project, Task, ProjectInvitation, ProjectMembership, TaskComment, TaskAttachment
+from .forms import TaskForm, ProjectForm, AddMemberForm, CustomUserCreationForm, TaskAttachmentForm
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth.models import User
 from django.contrib.auth import login
 from django.http import HttpResponseForbidden
+from django.http import JsonResponse
+
 
 #View to create task
 @login_required
@@ -28,6 +30,9 @@ def create_task(request, project_id):
 @login_required
 def update_task_status(request, task_id):
     task = get_object_or_404(Task, id=task_id)
+
+    if task.assigned_to != request.user:
+        return HttpResponseForbidden("You are not allowed to change this task's status.")
 
     if request.method == "POST":
         new_status = request.POST.get('status')
@@ -75,7 +80,7 @@ def project_dashboard(request, project_id):
     updates = project.updates.order_by('-created_at')[:5]
     projects = request.user.projects.all()
 
-    memberships = ProjectMembership.objects.filter(project=project)
+    memberships = ProjectMembership.objects.filter(project=project, user__isnull=False)
 
     try:
         user_membership = memberships.get(user=request.user)
@@ -241,4 +246,140 @@ def remove_member(request, project_id, user_id):
     membership.delete()
 
     return redirect('project_dashboard', project_id=project.id)
+
+def get_project_role(user, project):
+    membership = ProjectMembership.objects.filter(
+        user=user,
+        project=project
+    ).first()
+    return membership.role if membership else None
+
+@login_required
+def change_role(request, project_id, user_id):
+    project = get_object_or_404(Project, id=project_id)
+
+    if not is_project_admin(request.user, project):
+        return HttpResponseForbidden("Not allowed")
+    
+    membership = get_object_or_404(
+        ProjectMembership,
+        project=project,
+        user_id = user_id
+    )
+
+    if request.method == "POST":
+        new_role = request.POST.get("role")
+        if new_role in ["ADMIN", "MEMBER", "VIEWER"]:
+            membership.role = new_role
+            membership.save()
+        return redirect("project_dashboard", project_id=project.id)
+
+@login_required
+def delete_task(request, task_id):
+    task = get_object_or_404(Task, id=task_id)
+
+    # Nur der zugewiesene User darf löschen
+    if task.assigned_to != request.user:
+        return HttpResponseForbidden("You are not allowed to delete this task.")
+
+    if request.method == "POST":
+        task.delete()
+        return redirect('project_dashboard', project_id=task.project.id)        
+
+@login_required
+def task_detail(request, task_id):
+    task = get_object_or_404(Task, id=task_id)
+
+    # Prüfen, ob der User im Projekt ist
+    if not task.project.memberships.filter(user=request.user).exists():
+        return HttpResponseForbidden("You cannot view this task.")
+
+    # Render nur für AJAX (Modal)
+    return render(request, 'projectmanager/task_detail_partial.html', {
+        'task': task,
+        'user_in_project': True,
+    })
+
+
+@login_required
+def add_task_comment(request, task_id):
+    task = get_object_or_404(Task, id=task_id)
+    
+    if not task.project.memberships.filter(user=request.user).exists():
+        return HttpResponseForbidden("You cannot comment on this task.")
+
+    if request.method == "POST":
+        text = request.POST.get('text')
+        if text:
+            TaskComment.objects.create(task=task,user=request.user, text=text)
+    return redirect('task_detail', task_id=task.id)
+
+@login_required
+def add_task_attachment(request, task_id):
+    task = get_object_or_404(Task, id=task_id)
+
+    # Nur Projektmitglieder dürfen hochladen
+    if not task.project.memberships.filter(user=request.user).exists():
+        return HttpResponseForbidden("You cannot upload files to this task.")
+
+    if request.method == "POST":
+        form = TaskAttachmentForm(request.POST, request.FILES)
+        if form.is_valid():
+            attachment = form.save(commit=False)
+            attachment.task = task
+            attachment.uploaded_by = request.user
+            attachment.save()
+
+            # Wenn AJAX, gib direkt die HTML-Zeile zurück
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+                html = f'''
+                <li style="margin-bottom: 0.5rem; display:flex; align-items:center; justify-content:space-between;">
+                    <span style="display:flex; align-items:center; max-width: calc(100% - 50px);">
+                        📎
+                        <a href="{attachment.file.url}" download 
+                           class="attachment-name" 
+                           style="margin-left:0.3rem; word-break: break-word; text-decoration:none; color:#333;">
+                            {attachment.file.name.split("/")[-1].rsplit(".",1)[0]}
+                        </a>
+                    </span>
+                    <button type="button" 
+                            class="delete-attachment-btn" 
+                            data-attachment-id="{attachment.id}" 
+                            style="border:none; background:none; cursor:pointer; color:red;" 
+                            title="Delete Attachment">
+                        🗑️
+                    </button>
+                </li>
+                '''
+                return JsonResponse({'success': True, 'html': html})
+            
+            return redirect('task_detail', task_id=task.id)
+    else:
+        form = TaskAttachmentForm()
+
+    return render(request, 'projectmanager/task_detail.html', {
+        'task': task,
+        'attachment_form': form,
+        'user_in_project': task.project.memberships.filter(user=request.user).exists()
+    })
+
+
+@login_required
+def delete_task_attachment(request, attachment_id):
+    attachment = get_object_or_404(TaskAttachment, id=attachment_id)
+    task = attachment.task
+
+    # Nur Projektmitglieder dürfen löschen
+    if not task.project.memberships.filter(user=request.user).exists():
+        return HttpResponseForbidden("You cannot delete this attachment.")
+
+    attachment.file.delete(save=False)  # Datei löschen
+    attachment.delete()  # Datenbankeintrag löschen
+
+    # Wenn AJAX, nur den Erfolg zurückgeben
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'success': True, 'attachment_id': attachment_id})
+    
+    # Sonst klassisch redirect
+    return redirect('task_detail', task_id=task.id)
 

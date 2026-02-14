@@ -80,6 +80,7 @@ class ProjectMembership(models.Model):
     ROLE_CHOICES = [
         ('ADMIN', 'Admin'),
         ('MEMBER', 'Member'),
+        ('VIEWER', 'Viewer'),
     ]
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='memberships')
@@ -106,4 +107,21 @@ class AISuggestion(models.Model):
 
     def __str__(self):
         return f"{self.suggestion_type} suggestion"
+
+class TaskComment(models.Model):
+    task=models.ForeignKey('Task', on_delete=models.CASCADE)
+    user=models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    text=models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} on {self.task.title}"
     
+class TaskAttachment(models.Model):
+    task=models.ForeignKey('Task', on_delete=models.CASCADE, related_name="attachments")
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    file = models.FileField(upload_to='task_attachments/')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.file.name}" ({self.uploaded_by.username if self.uploaded_by else 'Unknown'})

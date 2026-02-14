@@ -1,5 +1,5 @@
 from django import forms
-from .models import Project, Task
+from .models import Project, Task, TaskAttachment
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 
@@ -11,8 +11,12 @@ class TaskForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         project = kwargs.pop('project', None)  # Projekt wird übergeben
         super().__init__(*args, **kwargs)
+
         if project:
-            self.fields['assigned_to'].queryset = project.team_members.all() 
+            # Nur User, die in diesem Projekt Mitglied sind
+            self.fields['assigned_to'].queryset = User.objects.filter(
+                projectmembership__project=project
+            )
 
 class  ProjectForm(forms.ModelForm):
     start_date = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}))
@@ -38,3 +42,8 @@ class CustomUserCreationForm(UserCreationForm):
         if commit:
             user.save()
         return user
+
+class TaskAttachmentForm(forms.ModelForm):
+    class Meta:
+        model = TaskAttachment
+        fields = ['file']
