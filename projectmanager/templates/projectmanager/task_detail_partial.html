@@ -3,7 +3,22 @@
 <link rel="stylesheet" type="text/css" href="{% static 'projectmanager/css/modal.css' %}">
 <h2>{{ task.title }}</h2>
 <p>Assigned To: {% if task.assigned_to %}{{ task.assigned_to.username }}{% else %}Unassigned{% endif %}</p>
-<p>Status: {{ task.status }}</p>
+<p>
+    <strong>Status:</strong> {{ task.status }}
+</p>
+
+{% if task.assigned_to == request.user %}
+<form method="post" action="{% url 'update_task_status' task.id %}">
+    {% csrf_token %}
+    <select name="status">
+        <option value="TODO" {% if task.status == "TODO" %}selected{% endif %}>To Do</option>
+        <option value="IN_PROGRESS" {% if task.status == "IN_PROGRESS" %}selected{% endif %}>In Progress</option>
+        <option value="DONE" {% if task.status == "DONE" %}selected{% endif %}>Done</option>
+    </select>
+    <button type="submit">Update Status</button>
+</form>
+{% endif %}
+
 <p>Deadline: {{ task.deadline }}</p>
 
 <h3>Comments</h3>

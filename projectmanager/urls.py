@@ -47,6 +47,9 @@ urlpatterns = [
     #Add Attachment
     path('tasks/<int:task_id>/add_attachment/', views.add_task_attachment, name='add_task_attachment'),
 
+    #Update task
+    path('tasks/<int:task_id>/update-status/', views.update_task_status, name="update_task_status"),
+
     #Delete Attachment
     path('attachments/<int:attachment_id>/delete/', views.delete_task_attachment, name='delete_task_attachment')
 
