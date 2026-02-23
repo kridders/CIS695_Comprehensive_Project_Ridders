@@ -6,7 +6,7 @@ from django.contrib.auth.models import User
 class TaskForm(forms.ModelForm):
     class Meta:
         model = Task
-        fields = ['title', 'description', 'deadline', 'status', 'assigned_to']
+        fields = ['title', 'description', 'deadline', 'status', 'assigned_to', 'priority']
         widgets = {'deadline': forms.DateInput(attrs={'type': 'date'})}
     def __init__(self, *args, **kwargs):
         project = kwargs.pop('project', None)  # Projekt wird übergeben

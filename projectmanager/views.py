@@ -108,6 +108,10 @@ def project_dashboard(request, project_id):
     status_filter = request.GET.get("status")
     assigned_filter = request.GET.get("assigned")
     sort = request.GET.get("sort")
+    priority_filter = request.GET.get('priority')
+
+    if priority_filter in dict(Task.PRIORITY_CHOICES):
+        tasks=tasks.filter(priority=priority_filter)
 
     if status_filter:
         tasks = tasks.filter(status=status_filter)
@@ -442,3 +446,21 @@ def clear_updates(request, project_id):
     
     project.updates.all().delete()
     return redirect("project_dashboard", project.id)
+
+@login_required
+def update_task_priority(request, task_id):
+    task = get_object_or_404(Task, id=task_id)
+
+    if task.assigned_to != request.user:
+        return HttpResponseForbidden("You cannot change this task's priority.")
+
+    if request.method == "POST":
+        new_priority = request.POST.get('priority')
+        if new_priority in dict(Task.PRIORITY_CHOICES):
+            task.priority = new_priority
+            task.save()
+            # Wenn AJAX: return JsonResponse({'success': True, 'priority': task.priority})
+            return redirect('project_dashboard', project_id=task.project.id)
+
+    return redirect('project_dashboard', project_id=task.project.id)
+

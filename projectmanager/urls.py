@@ -54,7 +54,10 @@ urlpatterns = [
     path('attachments/<int:attachment_id>/delete/', views.delete_task_attachment, name='delete_task_attachment'),
 
     #Clear Activity log
-    path("project/<int:project_id>/clear-updates/", views.clear_updates, name="clear_updates")
+    path("project/<int:project_id>/clear-updates/", views.clear_updates, name="clear_updates"),
+
+    #update Priorities
+    path('tasks/<int:task_id>/update_priority/', views.update_task_priority, name='update_task_priority')
 ]
 
 if settings.DEBUG:

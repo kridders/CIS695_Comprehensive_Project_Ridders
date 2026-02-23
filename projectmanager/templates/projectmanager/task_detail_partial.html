@@ -19,6 +19,17 @@
 </form>
 {% endif %}
 
+<p>Priority: 
+    <form method="post" action="{% url 'update_task_priority' task.id %}" style="display:inline;">
+        {% csrf_token %}
+        <select name="priority" onchange="this.form.submit()">
+            {% for key, value in task.PRIORITY_CHOICES %}
+                <option value="{{ key }}" {% if task.priority == key %}selected{% endif %}>{{ value }}</option>
+            {% endfor %}
+        </select>
+    </form>
+</p>
+
 <p>Deadline: {{ task.deadline }}</p>
 
 <h3>Comments</h3>

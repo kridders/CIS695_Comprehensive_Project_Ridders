@@ -47,10 +47,18 @@ class Task(models.Model):
         ('DONE', 'Done')
     ]
 
+    PRIORITY_CHOICES=[
+        ('LOW', 'Low'),
+        ('MEDIUM', 'Medium'),
+        ('HIGH', 'High'),
+        ('URGENT', 'Urgent')
+    ]
+
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     deadline = models.DateField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='TODO')
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='MEDIUM')
 
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="tasks")
     assigned_to = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True) 
