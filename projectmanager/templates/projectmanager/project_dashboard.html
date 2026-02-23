@@ -52,31 +52,53 @@
 {% endif %}
 
 
-
-
-
-<h2>Switch Project</h2>
-<ul>
-    {% for p in projects %}
-        <li>
-            <a href="{% url 'project_dashboard' p.id %}">{{ p.title }}</a>
-        </li>
-    {% endfor %}
-</ul>
-
 <hr>
 
 {% if user_role != "VIEWER" %}
 <p>
-    <a href="{% url 'create_project' %}">➕ Add New Project</a>
-    &nbsp;|&nbsp;
     <a href="{% url 'create_task' project.id %}">➕ Add New Task</a>
 </p>
 {% endif %}
 <hr>
 
-<!-- Tasks-Tabelle bleibt wie vorher -->
 <h2>Tasks</h2>
+<a href="?assigned={{ request.user.id }}">My Tasks</a>
+<form method="get" style="margin-bottom:1rem;">
+
+    <!-- Status -->
+    <select name="status">
+        <option value="">All Status</option>
+        <option value="TODO" {% if request.GET.status == "TODO" %}selected{% endif %}>To Do</option>
+        <option value="IN_PROGRESS" {% if request.GET.status == "IN_PROGRESS" %}selected{% endif %}>In Progress</option>
+        <option value="DONE" {% if request.GET.status == "DONE" %}selected{% endif %}>Done</option>
+    </select>
+
+    <!-- Assigned -->
+    <select name="assigned">
+        <option value="">All Members</option>
+        {% for member in memberships %}
+            <option value="{{ member.user.id }}"
+                {% if request.GET.assigned == member.user.id|stringformat:"s" %}selected{% endif %}>
+                {{ member.user.username }}
+            </option>
+        {% endfor %}
+    </select>
+
+    <!-- Sort -->
+    <select name="sort">
+        <option value="">Sort By</option>
+        <option value="deadline" {% if request.GET.sort == "deadline" %}selected{% endif %}>Deadline ↑</option>
+        <option value="deadline_desc" {% if request.GET.sort == "deadline_desc" %}selected{% endif %}>Deadline ↓</option>
+        <option value="status" {% if request.GET.sort == "status" %}selected{% endif %}>Status</option>
+    </select>
+
+    <button type="submit">Apply</button>
+</form>
+
+
+
+
+<!-- Tasks-Tabelle bleibt wie vorher -->
 <table border="1" cellpadding="5">
     <tr>
         <th>Task</th>
@@ -290,9 +312,20 @@ if (uploadForm) {
 <h2>Recent Updates</h2>
 <ul>
     {% for update in updates %}
-        <li>{{ update.created_at }} - {{ update.text }}</li>
+        <li>
+            <strong>{{ update.user.username }}</strong>
+            {{ update.text }}
+            <small> ({{update.created_at|date:"M d, H:i"}}) </small>
+        </li>
     {% empty %}
         <li>No updates yet.</li>
     {% endfor %}
 </ul>
+
+{% if user_role == "ADMIN" %}
+<form method="post" action="{% url 'clear_updates' project.id %}">
+    {% csrf_token %}
+    <button style="color:red;">Clear Activity Log </button>
+</form>
+{% endif %}
 {% endblock %}

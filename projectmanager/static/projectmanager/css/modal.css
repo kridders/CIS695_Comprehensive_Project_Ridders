@@ -35,3 +35,16 @@
     max-width: calc(100% - 50px); /* Platz für Mülltonne */
     overflow-wrap: break-word;
 }
+
+/* Logo-Link in Header weiß und ohne Unterstreichung */
+.header-left a.logo {
+    color: white !important;           /* zwingt die Farbe */
+    text-decoration: none !important;  /* entfernt Unterstreichung */
+    font-weight: bold;
+}
+
+/* Optional: Hover-Zustand */
+.header-left a.logo:hover {
+    color: white !important;
+    text-decoration: none !important;
+}

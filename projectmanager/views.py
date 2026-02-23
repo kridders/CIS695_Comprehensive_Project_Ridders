@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from .models import Project, Task, ProjectInvitation, ProjectMembership, TaskComment, TaskAttachment
+from .models import Project, Task, ProjectInvitation, ProjectMembership, TaskComment, TaskAttachment, Update
 from .forms import TaskForm, ProjectForm, AddMemberForm, CustomUserCreationForm, TaskAttachmentForm
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -13,6 +13,12 @@ from django.http import JsonResponse
 @login_required
 def create_task(request, project_id):
     project = get_object_or_404(Project, id=project_id)
+
+    Update.objects.create(
+        project=project,
+        user=request.user,
+        text="created task '{task.title}'"
+    )
 
     if request.method == "POST":
         form = TaskForm(request.POST, project=project)
@@ -39,6 +45,12 @@ def update_task_status(request, task_id):
         if new_status in dict(Task.STATUS_CHOICES):
             task.status = new_status
             task.save()
+
+    Update.objects.create(
+    project=task.project,
+    user=request.user,
+    text=f"changed status of '{task.title}' to {task.status}"
+)
 
     return redirect(
         'project_dashboard',
@@ -73,6 +85,7 @@ def create_project(request):
     )
 
 @login_required
+@login_required
 def project_dashboard(request, project_id):
     project = get_object_or_404(Project, id=project_id, members=request.user)
 
@@ -87,14 +100,39 @@ def project_dashboard(request, project_id):
         user_role = user_membership.role
     except ProjectMembership.DoesNotExist:
         user_role = None
+
+    # -------------------------
+    # 🔽 FILTER & SORT LOGIK
+    # -------------------------
+
+    status_filter = request.GET.get("status")
+    assigned_filter = request.GET.get("assigned")
+    sort = request.GET.get("sort")
+
+    if status_filter:
+        tasks = tasks.filter(status=status_filter)
+
+    if assigned_filter:
+        tasks = tasks.filter(assigned_to__id=assigned_filter)
+
+    if sort == "deadline":
+        tasks = tasks.order_by("deadline")
+    elif sort == "deadline_desc":
+        tasks = tasks.order_by("-deadline")
+    elif sort == "status":
+        tasks = tasks.order_by("status")
+
+    # -------------------------
+
     context = {
         'project': project,
         'tasks': tasks,
         'updates': updates,
         'projects': projects,
-        'memberships': memberships,  # ← verwenden wir im Template
+        'memberships': memberships,
         'user_role': user_role,
     }
+
     return render(request, 'projectmanager/project_dashboard.html', context)
 
 
@@ -308,6 +346,11 @@ def add_task_comment(request, task_id):
     if not task.project.memberships.filter(user=request.user).exists():
         return HttpResponseForbidden("You cannot comment on this task.")
 
+    Update.objects.create(
+        project=task.project,
+        user=request.user,
+        text=f"commented on '{task.title}'"
+    )
     if request.method == "POST":
         text = request.POST.get('text')
         if text:
@@ -357,6 +400,11 @@ def add_task_attachment(request, task_id):
     else:
         form = TaskAttachmentForm()
 
+    Update.objects.create(
+        project=task.project,
+        user=request.user,
+        text="uploaded attachment to '{task.title}'"
+    )
     return render(request, 'projectmanager/task_detail.html', {
         'task': task,
         'attachment_form': form,
@@ -383,3 +431,14 @@ def delete_task_attachment(request, attachment_id):
     # Sonst klassisch redirect
     return redirect('task_detail', task_id=task.id)
 
+
+@login_required
+def clear_updates(request, project_id):
+    project = get_object_or_404(Project, id=project_id)
+    membership = ProjectMembership.objects.get(project=project, user=request.user)
+
+    if membership.role != "ADMIN":
+        return HttpResponseForbidden()
+    
+    project.updates.all().delete()
+    return redirect("project_dashboard", project.id)

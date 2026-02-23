@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -78,8 +79,15 @@ WSGI_APPLICATION = 'student_pm.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': config('DB_NAME'),         # Name deiner MySQL-Datenbank
+        'USER': config('DB_USER'),     # Benutzer
+        'PASSWORD': config('DB_PASSWORD'),  # Passwort
+        'HOST': config('DB_HOST'),          # oder IP, wenn DB auf anderem Server
+        'PORT': config('DB_PORT'),
+        'OPTIONS': {
+            'charset': 'utf8mb4',
+        },
     }
 }
 
@@ -130,4 +138,4 @@ LOGIN_REDIRECT_URL = '/'  # nach erfolgreichem Login hierhin
 LOGOUT_REDIRECT_URL = '/login/'  # nach Logout
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = BASE_DIR

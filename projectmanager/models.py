@@ -60,12 +60,12 @@ class Task(models.Model):
     
 class Update(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="updates")
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Update ( {self.created_at.date()})"
-
+        return f"{self.project.title} - {self.created_at}"
 class Document(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="documents")
     title = models.CharField(max_length=200)

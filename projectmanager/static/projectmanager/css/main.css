@@ -132,3 +132,16 @@ body {
   border-bottom: 1px solid #eee;
   font-size: 14px;
 }
+
+/* Logo-Link in Header weiß und ohne Unterstreichung */
+.header-left a.logo {
+    color: white !important;           /* zwingt die Farbe */
+    text-decoration: none !important;  /* entfernt Unterstreichung */
+    font-weight: bold;
+}
+
+/* Optional: Hover-Zustand */
+.header-left a.logo:hover {
+    color: white !important;
+    text-decoration: none !important;
+}
