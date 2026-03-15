@@ -7,6 +7,8 @@ from django.contrib.auth.models import User
 from django.contrib.auth import login
 from django.http import HttpResponseForbidden
 from django.http import JsonResponse
+import json
+from django.views.decorators.http import require_POST
 
 
 #View to create task
@@ -34,28 +36,40 @@ def create_task(request, project_id):
 
 #view to change status of task
 @login_required
+@login_required
 def update_task_status(request, task_id):
     task = get_object_or_404(Task, id=task_id)
 
     if task.assigned_to != request.user:
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            return JsonResponse({'success': False, 'error': "Not allowed"})
         return HttpResponseForbidden("You are not allowed to change this task's status.")
 
     if request.method == "POST":
-        new_status = request.POST.get('status')
+        # Ajax: JSON Body
+        if request.content_type == 'application/json':
+            import json
+            data = json.loads(request.body)
+            new_status = data.get('status')
+        else:
+            new_status = request.POST.get('status')
+
         if new_status in dict(Task.STATUS_CHOICES):
             task.status = new_status
             task.save()
 
-    Update.objects.create(
-    project=task.project,
-    user=request.user,
-    text=f"changed status of '{task.title}' to {task.status}"
-)
+            Update.objects.create(
+                project=task.project,
+                user=request.user,
+                text=f"changed status of '{task.title}' to {task.status}"
+            )
 
-    return redirect(
-        'project_dashboard',
-        project_id=task.project.id
-    )
+            # Wenn Ajax: JSON zurückgeben
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+                return JsonResponse({'success': True})
+
+    # Fallback: redirect
+    return redirect('project_dashboard', project_id=task.project.id)
 
 @login_required
 def create_project(request):
@@ -464,3 +478,37 @@ def update_task_priority(request, task_id):
 
     return redirect('project_dashboard', project_id=task.project.id)
 
+from django.http import JsonResponse
+import json
+
+@login_required
+def update_task_status_ajax(request, task_id):
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "Invalid request method"})
+
+    task = get_object_or_404(Task, id=task_id)
+
+    # Optional: Berechtigung prüfen
+    if task.assigned_to != request.user:
+        return JsonResponse({"success": False, "error": "You are not allowed to change this task's status."})
+
+    try:
+        data = json.loads(request.body)
+        new_status = data.get("status")
+    except:
+        return JsonResponse({"success": False, "error": "Invalid JSON data"})
+
+    if new_status not in dict(Task.STATUS_CHOICES):
+        return JsonResponse({"success": False, "error": "Invalid status value"})
+
+    task.status = new_status
+    task.save()
+
+    # Optional: Update-Log
+    Update.objects.create(
+        project=task.project,
+        user=request.user,
+        text=f"Changed status of '{task.title}' to {task.status}"
+    )
+
+    return JsonResponse({"success": True, "new_status": task.status})

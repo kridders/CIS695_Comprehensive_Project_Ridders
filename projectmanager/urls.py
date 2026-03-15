@@ -19,6 +19,10 @@ urlpatterns = [
     # Update Status of Task
     path('task/<int:task_id>/status/', views.update_task_status, name='update_task_status'),
 
+    #Update Status of Task (Ajax)
+    # urls.py
+    path('tasks/<int:task_id>/update_status/', views.update_task_status_ajax, name='update_task_status_ajax'),
+
     # Registration of new user
     path('register/', views.register, name='register'),
 

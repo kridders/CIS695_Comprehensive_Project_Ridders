@@ -1,0 +1,30 @@
+<div class="kanban-task open-task-modal" data-task-id="{{ task.id }}">
+
+    <strong>{{ task.title }}</strong>
+
+    <br>
+
+    {% if task.assigned_to %}
+        👤 {{ task.assigned_to.username }}
+    {% endif %}
+
+    <br>
+
+    📅 {{ task.deadline }}
+
+    <br>
+
+    {% if task.priority == "LOW" %}
+        <span style="color:green;">LOW</span>
+
+    {% elif task.priority == "MEDIUM" %}
+        <span style="color:orange;">MEDIUM</span>
+
+    {% elif task.priority == "HIGH" %}
+        <span style="color:red;">HIGH</span>
+
+    {% elif task.priority == "URGENT" %}
+        <span style="color:darkred;">URGENT</span>
+    {% endif %}
+
+</div>
