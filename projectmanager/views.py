@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from .models import Project, Task, ProjectInvitation, ProjectMembership, TaskComment, TaskAttachment, Update
+from .models import Project, Task, ProjectInvitation, ProjectMembership, TaskComment, TaskAttachment, Update, Milestone
 from .forms import TaskForm, ProjectForm, AddMemberForm, CustomUserCreationForm, TaskAttachmentForm
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -9,30 +9,37 @@ from django.http import HttpResponseForbidden
 from django.http import JsonResponse
 import json
 from django.views.decorators.http import require_POST
-
+from django.views.decorators.csrf import csrf_exempt
 
 #View to create task
 @login_required
 def create_task(request, project_id):
     project = get_object_or_404(Project, id=project_id)
 
-    Update.objects.create(
-        project=project,
-        user=request.user,
-        text="created task '{task.title}'"
-    )
-
     if request.method == "POST":
         form = TaskForm(request.POST, project=project)
+
         if form.is_valid():
             task = form.save(commit=False)
             task.project = project
             task.save()
+
+           
+            Update.objects.create(
+                project=project,
+                user=request.user,
+                text=f"created task '{task.title}'"
+            )
+
             return redirect('project_dashboard', project_id=project.id)
+
     else:
         form = TaskForm(project=project)
 
-    return render(request, 'projectmanager/create_task.html', {'form': form, 'project': project})
+    return render(request, 'projectmanager/create_task.html', {
+        'form': form,
+        'project': project
+    })
 
 #view to change status of task
 @login_required
@@ -142,6 +149,8 @@ def project_dashboard(request, project_id):
 
     # -------------------------
 
+    milestones = project.milestones.all()
+
     context = {
         'project': project,
         'tasks': tasks,
@@ -149,20 +158,31 @@ def project_dashboard(request, project_id):
         'projects': projects,
         'memberships': memberships,
         'user_role': user_role,
+        'milestones': milestones,
     }
 
     return render(request, 'projectmanager/project_dashboard.html', context)
 
 
-@login_required
 def project_list(request):
-    projects = request.user.projects.all()
-    
-    return render(
-        request,
-        'projectmanager/project_list.html',
-        {'projects': projects}
-    )
+    # Alle Projekte, in denen der User Mitglied ist
+    projects = request.user.projects.all().prefetch_related('memberships__user')
+
+    # Rollen bestimmen
+    projects_with_roles = []
+    for project in projects:
+        membership = ProjectMembership.objects.filter(project=project, user=request.user).first()
+        user_role = membership.role if membership else None
+
+        projects_with_roles.append({
+            'project': project,
+            'user_role': user_role
+        })
+
+    context = {
+        'projects_with_roles': projects_with_roles
+    }
+    return render(request, 'projectmanager/project_list.html', context)
 
 
 
@@ -512,3 +532,106 @@ def update_task_status_ajax(request, task_id):
     )
 
     return JsonResponse({"success": True, "new_status": task.status})
+
+@login_required
+def create_milestone(request,project_id):
+    project = get_object_or_404(Project, id=project_id, members=request.user)
+
+    if request.method == "POST":
+        title = request.POST.get("title")
+        deadline = request.POST.get("deadline")
+
+        Milestone.objects.create(
+            project=project,
+            title=title,
+            deadline=deadline
+        )
+    return redirect("project_dashboard", project_id=project.id)
+
+
+# views.py
+@login_required
+def milestone_detail(request, milestone_id):
+    milestone = get_object_or_404(
+        Milestone, 
+        id=milestone_id,
+        project__members=request.user
+    )
+
+    tasks = milestone.tasks.all()
+
+    data = {
+        "title": milestone.title,
+        "deadline": milestone.deadline.strftime("%Y-%m-%d") if milestone.deadline else None,
+        "progress": milestone.progress,
+        "tasks": [
+            {
+                "id": t.id,               # <-- WICHTIG
+                "title": t.title,
+                "status": t.status,
+                "priority": t.priority
+            } for t in tasks
+        ]
+    }
+
+    return JsonResponse(data)
+
+
+@login_required
+def available_tasks(request, milestone_id):
+    milestone = get_object_or_404(Milestone, id=milestone_id, project__members=request.user)
+    # Alle Tasks des Projekts, die noch keinem Milestone zugewiesen sind
+    tasks = milestone.project.tasks.filter(milestone__isnull=True)
+    data = [{"id": t.id, "title": t.title} for t in tasks]
+    return JsonResponse(data, safe=False)
+
+@login_required
+@csrf_exempt
+def add_task_to_milestone(request, milestone_id, task_id):
+    if request.method == "POST":
+        milestone = get_object_or_404(Milestone, id=milestone_id, project__members=request.user)
+        task = get_object_or_404(Task, id=task_id, project=milestone.project)
+
+        task.milestone = milestone
+        task.save()
+
+        return JsonResponse({"success": True})
+    return JsonResponse({"success": False, "error": "Invalid request"})
+
+from datetime import datetime
+
+@login_required
+@require_POST
+def update_project(request, project_id):
+    try:
+        project = get_object_or_404(Project, id=project_id)
+
+        membership = ProjectMembership.objects.filter(
+            project=project,
+            user=request.user,
+            role='ADMIN'
+        ).first()
+
+        if not membership:
+            return JsonResponse({'success': False, 'error': 'No permission'})
+
+        end_date = request.POST.get('end_date')
+        goal = request.POST.get('goal')
+
+        if end_date:
+            project.end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+
+        if goal:
+            project.goal = goal
+
+        project.save()
+
+        return JsonResponse({
+            'success': True,
+            'end_date': project.end_date.strftime("%Y-%m-%d") if project.end_date else "",
+            'goal': project.goal or ""
+        })
+
+    except Exception as e:
+        print("SERVER ERROR:", e)
+        return JsonResponse({'success': False, 'error': str(e)})

@@ -61,7 +61,22 @@ urlpatterns = [
     path("project/<int:project_id>/clear-updates/", views.clear_updates, name="clear_updates"),
 
     #update Priorities
-    path('tasks/<int:task_id>/update_priority/', views.update_task_priority, name='update_task_priority')
+    path('tasks/<int:task_id>/update_priority/', views.update_task_priority, name='update_task_priority'),
+
+    #create milestone
+    path('projects/<int:project_id>/milestones/create/', views.create_milestone, name='create_milestone'),
+
+    #milestone detail
+    path('milestone/<int:milestone_id>/', views.milestone_detail, name='milestone_detail'),
+
+    #check available tasks for milestone
+    path('milestone/<int:milestone_id>/available_tasks/', views.available_tasks, name='available_tasks'),
+
+    #add tasks to milestones
+    path('milestone/<int:milestone_id>/add_task/<int:task_id>/', views.add_task_to_milestone, name='add_task_to_milestone'),
+
+    #update Project Details
+    path('projects/<int:project_id>/update/', views.update_project, name='update_project'),
 ]
 
 if settings.DEBUG:

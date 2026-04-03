@@ -3,13 +3,47 @@
 {% block title %}Create Task{% endblock %}
 
 {% block content %}
+
 <h1>Create New Task</h1>
 
-<form method="post">
+<form method="post" class="task-form">
     {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Save Task</button>
+
+    <!-- Titel -->
+    <label>Title</label>
+    {{ form.title }}
+
+    <!-- Beschreibung -->
+    <label>Description</label>
+    {{ form.description }}
+
+    <!-- Deadline -->
+    <label>Deadline</label>
+    {{ form.deadline }}
+
+    <!-- Status -->
+    <label>Status</label>
+    {{ form.status }}
+
+    <!-- Priority -->
+    <label>Priority</label>
+    {{ form.priority }}
+
+    <!-- Assigned -->
+    <label>Assign to</label>
+    {{ form.assigned_to }}
+
+    <!-- 🔥 NEU: Milestone -->
+    <label>Milestone</label>
+    {{ form.milestone }}
+
+    <br><br>
+
+    <button type="submit" class="btn-primary">Save Task</button>
 </form>
 
-<a href="{% url 'project_dashboard' project.id %}">Back to Project Dashboard</a>
+<br>
+
+<a href="{% url 'project_dashboard' project.id %}">← Back to Project Dashboard</a>
+
 {% endblock %}

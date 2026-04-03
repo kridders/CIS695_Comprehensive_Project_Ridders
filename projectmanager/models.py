@@ -62,6 +62,7 @@ class Task(models.Model):
 
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="tasks")
     assigned_to = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True) 
+    milestone = models.ForeignKey('Milestone', on_delete=models.SET_NULL, null=True, blank=True, related_name="tasks")
 
     def __str__(self):
         return self.title
@@ -133,3 +134,21 @@ class TaskAttachment(models.Model):
 
     def __str__(self):
         return f"{self.file.name}" ({self.uploaded_by.username if self.uploaded_by else 'Unknown'})
+
+class Milestone(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="milestones")
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    deadline = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.title
+
+    @property
+    def progress(self):
+        tasks = self.tasks.all()
+        if not tasks:
+            return 0
+        done = tasks.filter(status="DONE").count()
+        return int((done / tasks.count()) * 100)
