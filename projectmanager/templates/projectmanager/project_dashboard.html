@@ -554,7 +554,12 @@ setupModal("open-details-modal", "details-modal", "close-details");
     cursor: pointer;
     box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     z-index: 1001;
-    transition: transform 0.2s, background 0.2s;
+    transition: opacity 0.3s ease;
+}
+
+#chat-toggle.hidden{
+    opacity: 0;
+    pointer-events: none;
 }
 
 #chat-toggle:hover {
@@ -604,9 +609,127 @@ setupModal("open-details-modal", "details-modal", "close-details");
 .task-card.high { border-left: 4px solid orange; }
 .task-card.urgent { border-left: 4px solid red; }
 
+.hidden {
+    display: none !important; /* Blendet das Element komplett aus */
+}
 
 
 </style>
+
+<!-- Meilensteine -->
+<div class="milestones-section">
+    <h2>Milestones</h2>
+
+    <div class="milestones-list">
+
+        {% for milestone in milestones %}
+        <div class="milestone-card" onclick="openMilestoneDetail({{ milestone.id }})">
+            <strong>{{ milestone.title }}</strong>
+
+            <div>Deadline: {{ milestone.deadline }}</div>
+            <div>Tasks: {{ milestone.tasks.count }}</div>
+
+            <div class="milestone-progress">
+                <div class="progress-bar" style="width: {{ milestone.progress }}%;"></div>
+            </div>
+        </div>
+        {% empty %}
+        <p>No milestones yet.</p>
+        {% endfor %}
+
+        <!-- Add Button -->
+        {% if user_role != "VIEWER" %}
+        <div class="milestone-card add-milestone" onclick="openMilestoneModal()">
+            ➕ Add Milestone
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+
+<div id="milestone-detail-modal" class="modal" style="display:none;">
+    <div class="modal-content large">
+
+        <span onclick="closeMilestoneDetail()" class="close">&times;</span>
+
+        <div id="milestone-detail-content">
+                       
+            <!-- Dynamische Task-Liste -->
+            <div id="milestone-task-list">
+                <!-- Tasks werden hier per JS eingefügt -->
+            </div>
+        </div>
+
+    </div>
+</div>
+
+
+
+<div id="milestone-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <span onclick="closeMilestoneModal()" class="close">&times;</span>
+
+        <h3>Create Milestone</h3>
+
+        <form method="post" action="{% url 'create_milestone' project.id %}">
+            {% csrf_token %}
+            <input type="text" name="title" placeholder="Title" required>
+            <input type="date" name="deadline">
+            <button type="submit">Create</button>
+        </form>
+    </div>
+</div>
+
+
+
+
+<hr>
+
+<h2>Recent Updates</h2>
+<ul>
+    {% for update in updates %}
+        <li>
+            <strong>{{ update.user.username }}</strong>
+            {{ update.text }}
+            <small> ({{update.created_at|date:"M d, H:i"}}) </small>
+        </li>
+    {% empty %}
+        <li>No updates yet.</li>
+    {% endfor %}
+</ul>
+
+{% if user_role == "ADMIN" %}
+<form method="post" action="{% url 'clear_updates' project.id %}">
+    {% csrf_token %}
+    <button style="color:red;">Clear Activity Log </button>
+</form>
+
+<button id="chat-toggle">💬</button>
+<div id="chat-slideout">
+    <div class="chat-header">
+        <h3>Project Chat</h3>
+        <button id="chat-close">&times;</button>
+    </div>
+
+    <div class="chat-window" id="chat-log">
+        {% for msg in old_messages %}
+            <div class="message">
+                <span class="username"><strong>{{ msg.sender.username }}:</strong></span>
+                <span class="text">{{ msg.content }}</span>
+                <div class="timestamp" style="font-size: 0.7em; color: gray;">
+                    {{ msg.created_at|date:"H:i" }}
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+
+    <form id="chat-form">
+        <input type="text" id="chat-message-input" placeholder="Nachricht schreiben..." required>
+        <button type="submit" id="chat-message-submit">Send</button>
+    </form>
+</div>
+
+
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script>
@@ -789,34 +912,76 @@ document.querySelectorAll(".kanban-column").forEach(column => {
 });
 
 
-const chatToggle = document.getElementById('chat-toggle');
-const chatSlideout = document.getElementById('chat-slideout');
-const chatClose = document.getElementById('chat-close');
-const chatForm = document.getElementById('chat-form');
-const chatWindow = document.querySelector('#chat-slideout .chat-window');
 
-// Öffnen / Schließen des Slide-Outs
-chatToggle.addEventListener('click', () => {
-    chatSlideout.style.right = '0';
-});
 
-chatClose.addEventListener('click', () => {
-    chatSlideout.style.right = '-400px';
-});
+document.addEventListener("DOMContentLoaded", function() {
+    const chatToggle = document.getElementById('chat-toggle');
+    const chatSlideout = document.getElementById('chat-slideout');
+    const chatClose = document.getElementById('chat-close');
+    const chatForm = document.getElementById('chat-form');
+    const chatWindow = document.querySelector('.chat-window');
 
-// Dummy Chat Submit (Frontend only)
-chatForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const input = chatForm.querySelector('input');
-    if (input.value.trim() === '') return;
+    if (!chatToggle || !chatSlideout || !chatClose || !chatForm || !chatWindow) {
+        console.error("Ein Chat-Element existiert nicht im DOM!");
+        return;
+    }
 
-    const msgDiv = document.createElement('div');
-    msgDiv.classList.add('chat-message');
-    msgDiv.innerHTML = `<strong>You:</strong> ${input.value}`;
-    chatWindow.appendChild(msgDiv);
-    input.value = '';
+    // Scrollt beim Laden direkt nach unten zu den alten Nachrichten
     chatWindow.scrollTop = chatWindow.scrollHeight;
+
+    const projectId = "{{ project.id }}";
+    const socketUrl = (window.location.protocol === "https:")
+        ? `wss://${window.location.host}/ws/chat/${projectId}/`
+        : `ws://${window.location.host}/ws/chat/${projectId}/`;
+
+    const socket = new WebSocket(socketUrl);
+
+    // --- WebSocket Logik ---
+    socket.onmessage = function(e) {
+        const data = JSON.parse(e.data);
+        const msgDiv = document.createElement('div');
+        msgDiv.classList.add('chat-message');
+        msgDiv.innerHTML = `<strong>${data.username}:</strong> ${data.message}`;
+
+        chatWindow.appendChild(msgDiv);
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+    };
+
+    // --- Slide-Out & Button Logik ---
+    
+    // Öffnen
+    chatToggle.addEventListener('click', () => {
+        chatSlideout.style.right = '0';
+        // Button verstecken
+        chatToggle.style.display = 'none'; 
+    });
+
+    // Schließen
+    chatClose.addEventListener('click', () => {
+        chatSlideout.style.right = '-400px';
+        // Button wieder anzeigen
+        chatToggle.style.display = 'block'; 
+    });
+
+    // --- Nachricht senden ---
+    chatForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const input = chatForm.querySelector('input');
+        const message = input.value.trim();
+        
+        if (!message) return;
+
+        // Prüfen, ob der Socket offen ist, bevor gesendet wird
+        if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ message: message }));
+            input.value = '';
+        } else {
+            console.error("WebSocket ist nicht offen!");
+        }
+    });
 });
+
+
 
 // Milestone Modal
 function openMilestoneModal() {
@@ -994,119 +1159,6 @@ document.getElementById('add-task-to-milestone').addEventListener('click', funct
 
 
 </script>
-
-
-<!-- Meilensteine -->
-<div class="milestones-section">
-    <h2>Milestones</h2>
-
-    <div class="milestones-list">
-
-        {% for milestone in milestones %}
-        <div class="milestone-card" onclick="openMilestoneDetail({{ milestone.id }})">
-            <strong>{{ milestone.title }}</strong>
-
-            <div>Deadline: {{ milestone.deadline }}</div>
-            <div>Tasks: {{ milestone.tasks.count }}</div>
-
-            <div class="milestone-progress">
-                <div class="progress-bar" style="width: {{ milestone.progress }}%;"></div>
-            </div>
-        </div>
-        {% empty %}
-        <p>No milestones yet.</p>
-        {% endfor %}
-
-        <!-- Add Button -->
-        {% if user_role != "VIEWER" %}
-        <div class="milestone-card add-milestone" onclick="openMilestoneModal()">
-            ➕ Add Milestone
-        </div>
-        {% endif %}
-
-    </div>
-</div>
-
-<div id="milestone-detail-modal" class="modal" style="display:none;">
-    <div class="modal-content large">
-
-        <span onclick="closeMilestoneDetail()" class="close">&times;</span>
-
-        <div id="milestone-detail-content">
-                       
-            <!-- Dynamische Task-Liste -->
-            <div id="milestone-task-list">
-                <!-- Tasks werden hier per JS eingefügt -->
-            </div>
-        </div>
-
-    </div>
-</div>
-
-
-
-<div id="milestone-modal" class="modal" style="display:none;">
-    <div class="modal-content">
-        <span onclick="closeMilestoneModal()" class="close">&times;</span>
-
-        <h3>Create Milestone</h3>
-
-        <form method="post" action="{% url 'create_milestone' project.id %}">
-            {% csrf_token %}
-            <input type="text" name="title" placeholder="Title" required>
-            <input type="date" name="deadline">
-            <button type="submit">Create</button>
-        </form>
-    </div>
-</div>
-
-
-
-
-<hr>
-
-<h2>Recent Updates</h2>
-<ul>
-    {% for update in updates %}
-        <li>
-            <strong>{{ update.user.username }}</strong>
-            {{ update.text }}
-            <small> ({{update.created_at|date:"M d, H:i"}}) </small>
-        </li>
-    {% empty %}
-        <li>No updates yet.</li>
-    {% endfor %}
-</ul>
-
-{% if user_role == "ADMIN" %}
-<form method="post" action="{% url 'clear_updates' project.id %}">
-    {% csrf_token %}
-    <button style="color:red;">Clear Activity Log </button>
-</form>
-
-
-
-
-<!-- Chat Slide-Out -->
-<div id="chat-slideout">
-    <div class="chat-header">
-        <span>Team Chat</span>
-        <button id="chat-close">&times;</button>
-    </div>
-    <div class="chat-window">
-        <!-- Beispielnachrichten -->
-        <div class="chat-message"><strong>Alice:</strong> Ich habe die Aufgabe XY erledigt.</div>
-        <div class="chat-message"><strong>Bob:</strong> Super, ich kümmere mich um Milestone 2.</div>
-    </div>
-    <form id="chat-form">
-        <input type="text" placeholder="Type a message..." />
-        <button type="submit">Send</button>
-    </form>
-</div>
-
-<!-- Chat Button -->
-<button id="chat-toggle" title="Team Chat">💬</button>
-
 
 
 

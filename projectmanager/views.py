@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from .models import Project, Task, ProjectInvitation, ProjectMembership, TaskComment, TaskAttachment, Update, Milestone
+from .models import Project, Task, ProjectInvitation, ProjectMembership, TaskComment, TaskAttachment, Update, Milestone, Message
 from .forms import TaskForm, ProjectForm, AddMemberForm, CustomUserCreationForm, TaskAttachmentForm
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -151,6 +151,10 @@ def project_dashboard(request, project_id):
 
     milestones = project.milestones.all()
 
+    old_messages = project.messages.all().order_by('-created_at')[:50][::-1]
+
+    # ... dein Code für Filter & Sortierung ...
+
     context = {
         'project': project,
         'tasks': tasks,
@@ -159,8 +163,8 @@ def project_dashboard(request, project_id):
         'memberships': memberships,
         'user_role': user_role,
         'milestones': milestones,
+        'old_messages': old_messages, # <--- WICHTIG: Hier zum Context hinzufügen!
     }
-
     return render(request, 'projectmanager/project_dashboard.html', context)
 
 
@@ -635,3 +639,4 @@ def update_project(request, project_id):
     except Exception as e:
         print("SERVER ERROR:", e)
         return JsonResponse({'success': False, 'error': str(e)})
+    

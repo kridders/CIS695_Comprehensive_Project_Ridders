@@ -152,3 +152,12 @@ class Milestone(models.Model):
             return 0
         done = tasks.filter(status="DONE").count()
         return int((done / tasks.count()) * 100)
+    
+class Message(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="messages")
+    sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.sender.username}: {self.content[:20]}"
