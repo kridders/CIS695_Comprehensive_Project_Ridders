@@ -1,67 +1,224 @@
+{% load static %}
 <!DOCTYPE html>
-<html>
+<html lang="de">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Register - CourseCrew</title>
     <style>
+        :root {
+            --primary-green: #22c55e;
+            --dark-gray: #1f2937;
+            --light-bg: #f9fafb;
+            --border-color: #d1d5db;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f6f8;
+            margin: 0;
+            font-family: 'Inter', -apple-system, sans-serif;
+            background-color: var(--light-bg);
+            /* Dein Punktmuster für die Textur */
+            background-image: radial-gradient(#d1d5db 1px, transparent 1px);
+            background-size: 24px 24px;
+            
             display: flex;
+            flex-direction: row; /* Horizontal nebeneinander */
             justify-content: center;
             align-items: center;
+            gap: 80px; /* Großzügiger Abstand zwischen Logo und Formular */
             height: 100vh;
+            padding: 40px;
+            box-sizing: border-box;
+            overflow: hidden; /* Verhindert Scrollen im Hauptlayout */
         }
+
+        /* Linke Seite: Logo */
+        .logo-section {
+            flex: 0 1 400px; /* Logo nimmt maximal 400px ein */
+            text-align: center;
+        }
+
+        .logo-section img {
+            width: 100%;
+            height: auto;
+            max-width: 350px; /* Begrenzt die Logo-Größe */
+            filter: drop-shadow(0 10px 15px rgba(0,0,0,0.05));
+        }
+
+        /* Rechte Seite: Register Card */
         .register-container {
             background-color: white;
-            padding: 2rem 3rem;
-            border-radius: 10px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            width: 350px;
-        }
-        h1 {
-            text-align: center;
-            margin-bottom: 1.5rem;
-            color: #333;
-        }
-        form button {
+            padding: 2.5rem;
+            border-radius: 20px; /* Etwas moderner/runder */
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
             width: 100%;
-            padding: 0.6rem;
-            background-color: #28a745;
+            max-width: 420px;
+            box-sizing: border-box;
+            border: 1px solid rgba(0,0,0,0.05);
+            position: relative;
+            z-index: 10;
+        }
+
+        h1 {
+            margin-top: 0;
+            margin-bottom: 0.5rem;
+            color: var(--dark-gray);
+            font-size: 1.8rem;
+            font-weight: 800;
+        }
+
+        .subtitle {
+            color: #6b7280;
+            margin-bottom: 2rem;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        /* Styling für die Django-Form Felder */
+        .form-group {
+            margin-bottom: 1.2rem;
+        }
+
+        form label {
+            display: block;
+            margin-bottom: 0.4rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--dark-gray);
+        }
+
+        form input {
+            width: 100%;
+            padding: 0.7rem 0.9rem;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            box-sizing: border-box;
+            font-size: 1rem;
+            transition: all 0.2s ease;
+            background-color: #fcfcfc;
+        }
+
+        form input:focus {
+            outline: none;
+            border-color: var(--primary-green);
+            background-color: #fff;
+            box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.1);
+        }
+
+        /* Django Hilfe-Texte (z.B. Passwort-Regeln) */
+        .helptext {
+            display: block;
+            font-size: 0.7rem;
+            color: #9ca3af;
+            margin-top: 0.3rem;
+            line-height: 1.3;
+        }
+
+        /* Fehlermeldungen */
+        .field-errors {
+            color: #ef4444;
+            font-size: 0.75rem;
+            margin-top: 0.3rem;
+            display: block;
+            font-weight: 500;
+        }
+
+        /* Register Button */
+        .register-btn {
+            width: 100%;
+            padding: 0.9rem;
+            background-color: var(--primary-green);
             color: white;
             border: none;
-            border-radius: 6px;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 700;
             cursor: pointer;
             margin-top: 1rem;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 6px rgba(34, 197, 94, 0.2);
         }
-        form button:hover {
-            background-color: #1e7e34;
+
+        .register-btn:hover {
+            background-color: #16a34a;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(34, 197, 94, 0.3);
         }
-        p {
+
+        .register-btn:active {
+            transform: translateY(0);
+        }
+
+        /* Footer Links */
+        .footer-text {
             text-align: center;
-            margin-top: 1rem;
+            margin-top: 1.5rem;
+            font-size: 0.9rem;
+            color: #666;
         }
-        a {
-            color: #007bff;
+
+        .footer-text a {
+            color: var(--primary-green);
+            font-weight: 700;
             text-decoration: none;
         }
-        a:hover {
+
+        .footer-text a:hover {
             text-decoration: underline;
+        }
+
+        /* Mobile Responsive Anpassung */
+        @media (max-width: 900px) {
+            body {
+                flex-direction: column;
+                height: auto;
+                overflow-y: auto;
+                padding: 40px 20px;
+                gap: 40px;
+            }
+            .logo-section {
+                flex: none;
+                max-width: 200px;
+            }
+            .register-container {
+                padding: 1.5rem;
+            }
         }
     </style>
 </head>
 <body>
+
+    <div class="logo-section">
+        <img src="{% static 'projectmanager/img/web-app-manifest-512x512.png' %}" alt="CourseCrew Logo">
+    </div>
+
     <div class="register-container">
-        <h1>Register</h1>
+        <h1>Join the Crew</h1>
+        <p class="subtitle">Set up your account and start collaborating with your team.</p>
 
         <form method="post">
             {% csrf_token %}
-            {{ form.as_p }}
-            <button type="submit">Register</button>
+            
+            {% for field in form %}
+                <div class="form-group">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.help_text %}
+                        <small class="helptext">{{ field.help_text|safe }}</small>
+                    {% endif %}
+                    {% if field.errors %}
+                        <small class="field-errors">{{ field.errors.0 }}</small>
+                    {% endif %}
+                </div>
+            {% endfor %}
+
+            <button type="submit" class="register-btn">Create Account</button>
         </form>
 
-        <p>
-            Already have an account? <a href="{% url 'login' %}">Login here</a>
-        </p>
+        <div class="footer-text">
+            Already a member? <a href="{% url 'login' %}">Sign in here</a>
+        </div>
     </div>
+
 </body>
 </html>

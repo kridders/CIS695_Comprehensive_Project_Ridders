@@ -1,102 +1,187 @@
 {% load static %}
 {% load filename_filters %}
-<link rel="stylesheet" type="text/css" href="{% static 'projectmanager/css/modal.css' %}">
-<h2>{{ task.title }}</h2>
-<p>Assigned To: {% if task.assigned_to %}{{ task.assigned_to.username }}{% else %}Unassigned{% endif %}</p>
-<p>
-    <strong>Status:</strong> {{ task.status }}
-</p>
 
-{% if task.assigned_to == request.user %}
-<form method="post" action="{% url 'update_task_status' task.id %}">
-    {% csrf_token %}
-    <select name="status">
-        <option value="TODO" {% if task.status == "TODO" %}selected{% endif %}>To Do</option>
-        <option value="IN_PROGRESS" {% if task.status == "IN_PROGRESS" %}selected{% endif %}>In Progress</option>
-        <option value="DONE" {% if task.status == "DONE" %}selected{% endif %}>Done</option>
-    </select>
-    <button type="submit">Update Status</button>
-</form>
-{% endif %}
-
-<p>Priority: 
-    <form method="post" action="{% url 'update_task_priority' task.id %}" style="display:inline;">
-        {% csrf_token %}
-        <select name="priority" onchange="this.form.submit()">
-            {% for key, value in task.PRIORITY_CHOICES %}
-                <option value="{{ key }}" {% if task.priority == key %}selected{% endif %}>{{ value }}</option>
-            {% endfor %}
-        </select>
-    </form>
-</p>
-
-<p>Deadline: {{ task.deadline }}</p>
-
-<h3>Comments</h3>
-<ul>
-    {% for comment in task.comments.all %}
-        <li>{{ comment.user.username }}: {{ comment.text }}</li>
-    {% empty %}
-        <li>No comments yet.</li>
-    {% endfor %}
-</ul>
-
-<form method="post" action="{% url 'add_task_comment' task.id %}">
-    {% csrf_token %}
-    <textarea name="text"></textarea>
-    <button type="submit">Add Comment</button>
-</form>
-
-<h3>Attachments</h3>
-<form id="upload-attachment-form" method="post" enctype="multipart/form-data">
-    {% csrf_token %}
-    <input type="file" name="file" required>
-    <button type="submit">Upload</button>
-</form>
-
-<ul class="attachment-list">
-    {% for attachment in task.attachments.all %}
-        <li style="margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: space-between;">
-            
-            <span style="display:flex; align-items:center; max-width: calc(100% - 50px);">
-                
-                <!-- Icon basierend auf Dateiendung -->
-                {% with ext=attachment.file.name|slice:"-4:"|lower %}
-                    {% if ext == ".pdf" %}
-                        📄
-                    {% elif ext == ".doc" or ext == "docx" %}
-                        📝
-                    {% elif ext == ".ppt" or ext == "pptx" %}
-                        📊
-                    {% elif ext == ".xls" or ext == "xlsx" %}
-                        📈
-                    {% elif ext == ".jpg" or ext == ".png" or ext == ".gif" %}
-                        🖼️
-                    {% else %}
-                        📎
-                    {% endif %}
-                {% endwith %}
-
-                <!-- Sauberer Dateiname, jetzt anklickbar zum Download -->
-                <a href="{{ attachment.file.url }}" download 
-                   class="attachment-name" 
-                   style="margin-left:0.3rem; word-break: break-word; text-decoration:none; color:#333;">
-                    {{ attachment.file.name|basename_noext }}
-                </a>
-
-            </span>
-
-            <!-- Delete Button -->
+<div class="modal-header" style="position: relative; display: block; padding-right: 6rem;">
+    <h5 class="modal-title" id="taskModalLabel" style="margin-bottom: 2px; font-weight: bold;">{{ task.title }}</h5>
+    
+    <div class="task-meta" style="color: #7f8c8d; font-size: 0.85rem; margin-bottom: 10px;">
+        {% if task.assigned_to %}
+            Assigned to: <strong>{{ task.assigned_to.username }}</strong>
+        {% else %}
+            <em>Unassigned</em>
+        {% endif %}
+    </div>
+    {% if task.assigned_to == request.user or user_is_admin %}
             <button type="button" 
-                    class="delete-attachment-btn" 
-                    data-attachment-id="{{ attachment.id }}" 
-                    style="border:none; background:none; cursor:pointer; color:red;" 
-                    title="Delete Attachment">
+                    class="js-delete-task btn-trash-top-right" 
+                    data-url="{% url 'delete_task' task.id %}" 
+                    data-task-id="{{ task.id }}"
+                    title="Delete Task">
                 🗑️
             </button>
+        {% endif %}
 
-        </li>
-    {% empty %}
-        <li>No attachments yet.</li>
+
+
+</div>
+
+<hr class="modal-divider" style="margin-top: 5px;">
+
+<div class="task-modal-section">
+    <h3>⚙️ Status & Priority</h3>
+    <div class="status-priority-controls">
+        {% if task.assigned_to == request.user %}
+        <form method="post" action="{% url 'update_task_status' task.id %}" class="inline-control-form">
+            {% csrf_token %}
+            <select name="status" onchange="this.form.submit()">
+                <option value="TODO" {% if task.status == "TODO" %}selected{% endif %}>To Do</option>
+                <option value="IN_PROGRESS" {% if task.status == "IN_PROGRESS" %}selected{% endif %}>In Progress</option>
+                <option value="DONE" {% if task.status == "DONE" %}selected{% endif %}>Done</option>
+            </select>
+        </form>
+        {% else %}
+            <span class="status-badge" style="padding: 6px 12px; background: #f3f4f6; border-radius: 6px; font-size: 0.9rem;">
+                {{ task.get_status_display }}
+            </span>
+        {% endif %}
+
+        <form method="post" action="{% url 'update_task_priority' task.id %}" class="inline-control-form">
+            {% csrf_token %}
+            <select name="priority" onchange="this.form.submit()">
+                {% for key, value in task.PRIORITY_CHOICES %}
+                    <option value="{{ key }}" {% if task.priority == key %}selected{% endif %}>{{ value }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+</div>
+
+<div class="task-modal-section">
+    <h3>💬 Comments</h3>
+    
+    <div id="comment-list-{{ task.id }}" class="comment-list">
+    {% for comment in task.taskcomment_set.all %}
+        <div class="comment-item" id="comment-{{ comment.id }}">
+            <div class="comment-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <strong>{{ comment.user.username }}</strong>
+                {% if comment.user == request.user %}
+                    <button class="js-delete-comment btn-delete-small" 
+                            data-url="{% url 'delete_task_comment' comment.id %}"
+                            data-comment-id="{{ comment.id }}"
+                            style="background:none; border:none; cursor:pointer;">
+                        🗑️
+                    </button>
+                {% endif %}
+            </div>
+            <p>{{ comment.text }}</p>
+            <small>{{ comment.created_at|date:"d.m., H:i" }}</small>
+        </div>
     {% endfor %}
-</ul>
+    </div>
+
+    <form class="js-comment-form" data-task-id="{{ task.id }}" action="{% url 'add_task_comment' task.id %}" method="post">
+        {% csrf_token %}
+        <textarea name="text" placeholder="Write a comment..." required style="width: 100%; height: 60px; padding: 10px; border-radius: 8px; border: 1px solid #d1d5db; margin-top: 10px; resize: none;"></textarea>
+        <button type="submit" class="btn-primary-small">Post Comment</button>
+    </form>
+</div>
+
+<div class="task-modal-section">
+    <h3>📎 Attachments</h3>
+    <ul class="attachment-list" id="attachment-list-{{ task.id }}" style="list-style: none; padding: 0;">
+        {% for attachment in task.attachments.all %}
+            <li class="attachment-item" id="attachment-{{ attachment.id }}">
+                <a href="{{ attachment.file.url }}" download class="attachment-link">
+                    <span class="file-icon">📎</span>
+                    <span class="file-name">{{ attachment.filename }}</span>
+                </a>
+                <button type="button" 
+                        class="js-delete-btn delete-attachment-btn" 
+                        data-id="{{ attachment.id }}" 
+                        data-url="{% url 'delete_task_attachment' attachment.id %}"
+                        style="background:none; border:none; cursor:pointer;">
+                    🗑️
+                </button>
+            </li>
+        {% endfor %}
+    </ul>
+
+    <form id="js-upload-form" method="post" enctype="multipart/form-data" 
+          action="{% url 'add_task_attachment' task.id %}" data-task-id="{{ task.id }}">
+        {% csrf_token %}
+        <label class="custom-file-upload" style="cursor: pointer; display: inline-block; padding: 6px 12px; background: #f3f4f6; border-radius: 6px; border: 1px solid #d1d5db; font-size: 0.85rem;">
+            <input type="file" name="file" required style="display: none;">
+            <span>Choose File</span>
+        </label>
+        <button type="submit" class="btn-secondary-small">Upload</button>
+    </form>
+</div>
+
+<style>
+/* Sektionen */
+.task-modal-section { margin-top: 20px; }
+.task-modal-section h3 { font-size: 0.95rem; text-transform: uppercase; color: #9ca3af; margin-bottom: 10px; letter-spacing: 0.5px; }
+.modal-divider { border: 0; border-top: 1px solid #f3f4f6; margin: 15px 0; }
+
+/* Controls */
+.status-priority-controls { display: flex; gap: 10px; }
+.inline-control-form select {
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid #d1d5db;
+    background-color: #f9fafb;
+    font-size: 0.9rem;
+}
+
+/* Kommentare */
+.comment-item {
+    background: #f9fafb;
+    padding: 10px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    border-left: 3px solid #22c55e;
+}
+.comment-item p { margin: 5px 0; font-size: 0.9rem; }
+.comment-item small { color: #9ca3af; font-size: 0.75rem; }
+
+/* Attachments */
+.attachment-item {
+    background: #fff;
+    border: 1px solid #f3f4f6;
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin-bottom: 5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.attachment-link { text-decoration: none; color: #374151; font-size: 0.9rem; display: flex; align-items: center; }
+
+/* Buttons */
+.btn-primary-small { background: #1f2937; color: white; border: none; padding: 6px 15px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; margin-top: 5px; }
+.btn-secondary-small { background: #22c55e; color: white; border: none; padding: 6px 15px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+
+/* Trash Button styling */
+/* The Trash Button styling */
+.btn-trash-top-right {
+    position: absolute;
+    /* top: 1rem entspricht ca. 16px, wir nehmen 0.9rem für perfekte optische Mitte zur Schrift */
+    top: 0.9rem;      
+    /* Der Close-Button ist bei 1rem (ca. 16px) + seine Breite (ca. 20px). 
+       Mit 3.5rem Abstand von rechts sitzt die Tonne direkt links neben dem X */
+    right: 3.5rem;    
+    background: none;
+    border: none;
+    font-size: 1.3rem; /* Etwas größer für bessere Sichtbarkeit */
+    cursor: pointer;
+    transition: transform 0.2s ease, color 0.2s ease;
+    z-index: 10;
+    padding: 0;
+    line-height: 1;
+}
+
+.btn-trash-top-right:hover {
+    transform: scale(1.2);
+    color: #e74c3c;
+}
+</style>

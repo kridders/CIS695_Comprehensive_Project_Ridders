@@ -1,67 +1,173 @@
+{% load static %}
 <!DOCTYPE html>
-<html>
+<html lang="de">
 <head>
+    <meta charset="UTF-8">
     <title>Login - CourseCrew</title>
     <style>
+        :root {
+            --primary-green: #22c55e;
+            --dark-gray: #1f2937;
+            --light-bg: #f9fafb;
+            --border-color: #d1d5db;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f6f8;
+            margin: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: #f9fafb;
+            /* Dezentes Punktmuster in Grau */
+            background-image: radial-gradient(#d1d5db 1px, transparent 1px);
+            background-size: 24px 24px;
+            
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
             height: 100vh;
+            overflow: hidden;
         }
+
+        /* Logo Bereich */
+        .logo-container {
+            margin-bottom: 2.5rem; /* Etwas mehr Abstand nach unten */
+            text-align: center;
+        }
+
+        .logo-container img {
+            max-width: 250px; /* Hier die gewünschte Breite deines Logos anpassen */
+            height: auto;
+            display: block; /* Verhindert kleine Abstände unter dem Bild */
+            margin: 0 auto; /* Zentriert das Bild im Container */
+        }
+
+        /* Login Card */
         .login-container {
             background-color: white;
-            padding: 2rem 3rem;
-            border-radius: 10px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            width: 350px;
+            padding: 2.5rem;
+            border-radius: 16px; /* Etwas runder für modernen Look */
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            width: 100%;
+            max-width: 400px;
+            border: 1px solid rgba(0,0,0,0.05); /* Ganz feiner Rahmen */
         }
+
         h1 {
             text-align: center;
+            margin-top: 0;
             margin-bottom: 1.5rem;
-            color: #333;
+            color: var(--dark-gray);
+            font-size: 1.5rem;
         }
-        form button {
+
+        /* Styling für die Django-Form Felder */
+        form label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--dark-gray);
+        }
+
+        form input {
             width: 100%;
-            padding: 0.6rem;
-            background-color: #007bff;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-sizing: border-box;
+            font-size: 1rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            margin-bottom: 1.2rem; /* Abstand nach unten für jedes Feld */
+        }
+
+        form input:focus {
+            outline: none;
+            border-color: var(--primary-green);
+            box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
+        }
+
+        /* Fehlermeldungen für Felder */
+        .field-errors {
+            color: #ef4444;
+            font-size: 0.8rem;
+            margin-top: -1rem;
+            margin-bottom: 1rem;
+            display: block;
+        }
+
+        /* Login Button */
+        .login-btn {
+            width: 100%;
+            padding: 0.8rem;
+            background-color: var(--dark-gray); /* Schwarz als Hauptfarbe */
             color: white;
             border: none;
-            border-radius: 6px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
             cursor: pointer;
-            margin-top: 1rem;
+            margin-top: 0.5rem;
+            transition: background-color 0.2s, transform 0.1s;
         }
-        form button:hover {
-            background-color: #0056b3;
+
+        .login-btn:hover {
+            background-color: #000;
+            transform: translateY(-1px);
         }
-        p {
+
+        .login-btn:active {
+            transform: translateY(0);
+        }
+
+        /* Footer Links */
+        .footer-text {
             text-align: center;
-            margin-top: 1rem;
+            margin-top: 1.5rem;
+            font-size: 0.9rem;
+            color: #666;
         }
-        a {
-            color: #007bff;
+
+        .footer-text a {
+            color: var(--primary-green);
+            font-weight: 600;
             text-decoration: none;
         }
-        a:hover {
+
+        .footer-text a:hover {
             text-decoration: underline;
         }
     </style>
 </head>
 <body>
+
+    <div class="logo-container">
+        <img src="{% static 'projectmanager/img/web-app-manifest-512x512.png' %}" alt="CourseCrew Logo">
+    </div>
+
     <div class="login-container">
-        <h1>Login</h1>
+        <h1>Welcome back</h1>
 
         <form method="post">
             {% csrf_token %}
-            {{ form.as_p }}
-            <button type="submit">Login</button>
+            
+            {# Wir iterieren manuell, um die as_p Formatierung zu umgehen #}
+            {% for field in form %}
+                <div>
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.errors %}
+                        <small class="field-errors">{{ field.errors.0 }}</small>
+                    {% endif %}
+                </div>
+            {% endfor %}
+
+            <button type="submit" class="login-btn">Login</button>
         </form>
 
-        <p>
+        <div class="footer-text">
             No account? <a href="{% url 'register' %}">Register here</a>
-        </p>
+        </div>
     </div>
+
 </body>
 </html>

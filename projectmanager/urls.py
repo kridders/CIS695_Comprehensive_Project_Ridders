@@ -77,6 +77,18 @@ urlpatterns = [
 
     #update Project Details
     path('projects/<int:project_id>/update/', views.update_project, name='update_project'),
+
+    #find users in database 
+    path('search-users/', views.search_users, name='search_users'),
+
+    #delete chat
+    path('projects/<int:project_id>/chat/delete/', views.delete_chat_history, name='delete_chat'),
+
+    #delete comments
+    path('comment/<int:comment_id>/delete/', views.delete_task_comment, name='delete_task_comment'),
+
+    #leave project
+    path('project/<int:project_id>/leave/', views.leave_project, name='leave_project'),
 ]
 
 if settings.DEBUG:

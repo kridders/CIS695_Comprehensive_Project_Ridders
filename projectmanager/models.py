@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.conf import settings
+import os
 
 # Create your models here.
 class Project(models.Model):
@@ -70,11 +71,16 @@ class Task(models.Model):
 class Update(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="updates")
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    task = models.ForeignKey(
+        'Task', 
+        on_delete=models.CASCADE, 
+        null=True, 
+        blank=True, 
+        related_name="updates"
+    )
     text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.project.title} - {self.created_at}"
+    
 class Document(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="documents")
     title = models.CharField(max_length=200)
@@ -132,6 +138,10 @@ class TaskAttachment(models.Model):
     file = models.FileField(upload_to='task_attachments/')
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
+
+    @property
+    def filename(self):
+        return os.path.basename(self.file.name)
     def __str__(self):
         return f"{self.file.name}" ({self.uploaded_by.username if self.uploaded_by else 'Unknown'})
 

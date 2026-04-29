@@ -7,7 +7,9 @@ from django.contrib.auth.models import User
 from django.contrib.auth import login
 from django.http import HttpResponseForbidden
 from django.http import JsonResponse
+from django.urls import reverse
 import json
+import os
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
 
@@ -155,9 +157,12 @@ def project_dashboard(request, project_id):
 
     # ... dein Code für Filter & Sortierung ...
 
+    task_form = TaskForm(project=project)
+
     context = {
         'project': project,
         'tasks': tasks,
+        'task_form': task_form,
         'updates': updates,
         'projects': projects,
         'memberships': memberships,
@@ -167,7 +172,7 @@ def project_dashboard(request, project_id):
     }
     return render(request, 'projectmanager/project_dashboard.html', context)
 
-
+@login_required
 def project_list(request):
     # Alle Projekte, in denen der User Mitglied ist
     projects = request.user.projects.all().prefetch_related('memberships__user')
@@ -355,16 +360,43 @@ def change_role(request, project_id, user_id):
         return redirect("project_dashboard", project_id=project.id)
 
 @login_required
+@login_required
+@require_POST
 def delete_task(request, task_id):
     task = get_object_or_404(Task, id=task_id)
+    project = task.project
 
-    # Nur der zugewiesene User darf löschen
-    if task.assigned_to != request.user:
-        return HttpResponseForbidden("You are not allowed to delete this task.")
+    # 1. Check if the user is the owner of the task (assigned_to)
+    is_task_owner = (task.assigned_to == request.user)
 
-    if request.method == "POST":
-        task.delete()
-        return redirect('project_dashboard', project_id=task.project.id)        
+    # 2. Check if the user is an ADMIN of the project
+    is_project_admin = project.memberships.filter(
+        user=request.user, 
+        role='ADMIN'
+    ).exists()
+
+    # Permission logic: Must be owner OR admin
+    if not (is_task_owner or is_project_admin):
+        return HttpResponseForbidden("You are not authorized to delete this task. Only the assignee or a project admin can do this.")
+
+    # Store info for the activity log before deleting
+    task_title = task.title
+    task.delete()
+
+    # Log the update
+    Update.objects.create(
+        project=project,
+        user=request.user,
+        text=f"deleted task '{task_title}'"
+    )
+
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({
+            'success': True,
+            'redirect_url': reverse('project_dashboard', args=[project.id])
+        })
+
+    return redirect('project_dashboard', project_id=project.id)       
 
 @login_required
 def task_detail(request, task_id):
@@ -374,84 +406,138 @@ def task_detail(request, task_id):
     if not task.project.memberships.filter(user=request.user).exists():
         return HttpResponseForbidden("You cannot view this task.")
 
-    # Render nur für AJAX (Modal)
+    # Check if the current user is an ADMIN in this project
+    user_is_admin = task.project.memberships.filter(
+        user=request.user, 
+        role='ADMIN'
+    ).exists()
+
+    # Render only for AJAX (Modal)
     return render(request, 'projectmanager/task_detail_partial.html', {
         'task': task,
         'user_in_project': True,
+        'user_is_admin': user_is_admin, # <--- Hier wird die Info ans HTML übergeben
     })
+
 
 
 @login_required
 def add_task_comment(request, task_id):
+    # Fetch the task or return 404
     task = get_object_or_404(Task, id=task_id)
     
-    if not task.project.memberships.filter(user=request.user).exists():
-        return HttpResponseForbidden("You cannot comment on this task.")
+    # Check if the user is a member of the project
+    if not task.project.members.filter(id=request.user.id).exists():
+        return JsonResponse({'status': 'error', 'message': 'Forbidden'}, status=403)
 
-    Update.objects.create(
-        project=task.project,
-        user=request.user,
-        text=f"commented on '{task.title}'"
-    )
     if request.method == "POST":
         text = request.POST.get('text')
         if text:
-            TaskComment.objects.create(task=task,user=request.user, text=text)
-    return redirect('task_detail', task_id=task.id)
+            # Create the comment in the database
+            comment = TaskComment.objects.create(task=task, user=request.user, text=text)
+            
+            # Create an activity update for the dashboard
+            Update.objects.create(
+                project=task.project,
+                user=request.user,
+                text=f"commented on '{task.title}'"
+            )
+
+            # Return the new comment data as JSON
+            return JsonResponse({
+                'status': 'success',
+                'username': comment.user.username,
+                'text': comment.text,
+                'created_at': comment.created_at.strftime("%d.m., %H:%M")
+            })
+            
+    return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
+
+
+
+@login_required
+@require_POST
+def delete_task_comment(request, comment_id):
+    # Get the comment or 404
+    comment = get_object_or_404(TaskComment, id=comment_id)
+
+    # Security check: Only the author can delete
+    if comment.user != request.user:
+        return JsonResponse({'status': 'error', 'message': 'Unauthorized'}, status=403)
+
+    comment.delete()
+    
+    # Return success response for AJAX
+    return JsonResponse({'status': 'success'})
+
+import os
+from django.http import JsonResponse, HttpResponseForbidden
+from django.shortcuts import get_object_or_404, redirect
+from django.contrib.auth.decorators import login_required
+from .models import Task, TaskAttachment, Update
+from .forms import TaskAttachmentForm
 
 @login_required
 def add_task_attachment(request, task_id):
+    # Fetch the task object or return 404
     task = get_object_or_404(Task, id=task_id)
 
-    # Nur Projektmitglieder dürfen hochladen
+    # Permission check: Only project members are allowed to upload files
+    # Note: Use your specific membership check here (memberships vs. members)
     if not task.project.memberships.filter(user=request.user).exists():
         return HttpResponseForbidden("You cannot upload files to this task.")
 
     if request.method == "POST":
+        # Initialize form with POST data and uploaded files
         form = TaskAttachmentForm(request.POST, request.FILES)
+        
         if form.is_valid():
+            # Create object but don't save to DB yet
             attachment = form.save(commit=False)
             attachment.task = task
             attachment.uploaded_by = request.user
             attachment.save()
 
-            # Wenn AJAX, gib direkt die HTML-Zeile zurück
-            if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-                html = f'''
-                <li style="margin-bottom: 0.5rem; display:flex; align-items:center; justify-content:space-between;">
-                    <span style="display:flex; align-items:center; max-width: calc(100% - 50px);">
-                        📎
-                        <a href="{attachment.file.url}" download 
-                           class="attachment-name" 
-                           style="margin-left:0.3rem; word-break: break-word; text-decoration:none; color:#333;">
-                            {attachment.file.name.split("/")[-1].rsplit(".",1)[0]}
-                        </a>
-                    </span>
-                    <button type="button" 
-                            class="delete-attachment-btn" 
-                            data-attachment-id="{attachment.id}" 
-                            style="border:none; background:none; cursor:pointer; color:red;" 
-                            title="Delete Attachment">
-                        🗑️
-                    </button>
-                </li>
-                '''
-                return JsonResponse({'success': True, 'html': html})
-            
-            return redirect('task_detail', task_id=task.id)
-    else:
-        form = TaskAttachmentForm()
+            # Create an activity update for the dashboard
+            Update.objects.create(
+                project=task.project,
+                user=request.user,
+                text=f"uploaded attachment to '{task.title}'"
+            )
 
-    Update.objects.create(
-        project=task.project,
-        user=request.user,
-        text="uploaded attachment to '{task.title}'"
-    )
-    return render(request, 'projectmanager/task_detail.html', {
-        'task': task,
-        'attachment_form': form,
-        'user_in_project': task.project.memberships.filter(user=request.user).exists()
-    })
+            # Check if the request is an AJAX request
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+                # Get the raw filename without the directory path for the UI
+                full_path = attachment.file.name
+                clean_filename = os.path.basename(full_path)
+                
+                # Determine file icon based on extension
+                ext = os.path.splitext(full_path)[1].lower()
+                icon = "📎"
+                if ext == ".pdf": icon = "📄"
+                elif ext in [".doc", ".docx"]: icon = "📝"
+                elif ext in [".jpg", ".png", ".jpeg"]: icon = "🖼️"
+                elif ext in [".xls", ".xlsx"]: icon = "📈"
+
+                # Return JSON response for the JavaScript handler
+                return JsonResponse({
+                    'success': True,
+                    'attachment_id': attachment.id,
+                    'file_url': attachment.file.url,
+                    'file_name': clean_filename,
+                    'icon': icon
+                })
+            
+            # Standard redirect for non-AJAX fallback
+            return redirect('task_detail', task_id=task.id)
+        
+        else:
+            # Handle invalid form for AJAX
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+                return JsonResponse({'success': False, 'errors': form.errors}, status=400)
+
+    # If GET request or other, redirect back to task detail
+    return redirect('task_detail', task_id=task.id)
 
 
 @login_required
@@ -512,9 +598,8 @@ def update_task_status_ajax(request, task_id):
 
     task = get_object_or_404(Task, id=task_id)
 
-    # Optional: Berechtigung prüfen
     if task.assigned_to != request.user:
-        return JsonResponse({"success": False, "error": "You are not allowed to change this task's status."})
+        return JsonResponse({"success": False, "error": "You are not allowed..."})
 
     try:
         data = json.loads(request.body)
@@ -528,29 +613,48 @@ def update_task_status_ajax(request, task_id):
     task.status = new_status
     task.save()
 
-    # Optional: Update-Log
+    # Log erstellen
     Update.objects.create(
         project=task.project,
         user=request.user,
         text=f"Changed status of '{task.title}' to {task.status}"
     )
 
-    return JsonResponse({"success": True, "new_status": task.status})
+    # --- HIER IST DIE ENTSCHEIDENDE ERWEITERUNG ---
+    response_data = {
+        "success": True, 
+        "new_status": task.status
+    }
+
+    # Wenn die Aufgabe einem Meilenstein zugeordnet ist, Daten mitschicken
+    if task.milestone:
+        response_data["milestone_id"] = task.milestone.id
+        # Hier wird dein @property 'progress' aus dem Milestone-Model aufgerufen:
+        response_data["new_progress"] = task.milestone.progress 
+
+    return JsonResponse(response_data)
 
 @login_required
-def create_milestone(request,project_id):
-    project = get_object_or_404(Project, id=project_id, members=request.user)
-
+def create_milestone(request, project_id):
+    project = get_object_or_404(Project, id=project_id)
+    
     if request.method == "POST":
-        title = request.POST.get("title")
-        deadline = request.POST.get("deadline")
+        title = request.POST.get('title')
+        deadline = request.POST.get('deadline')
+        linked_tasks = request.POST.getlist('linked_tasks') # Liste der IDs
 
-        Milestone.objects.create(
+        
+        milestone = Milestone.objects.create(
             project=project,
             title=title,
-            deadline=deadline
+            deadline=deadline if deadline else None
         )
-    return redirect("project_dashboard", project_id=project.id)
+
+        # Ausgewählte Tasks mit dem Meilenstein verknüpfen
+        if linked_tasks:
+            Task.objects.filter(id__in=linked_tasks, project=project).update(milestone=milestone)
+
+        return redirect('project_dashboard', project_id=project.id)
 
 
 # views.py
@@ -565,6 +669,7 @@ def milestone_detail(request, milestone_id):
     tasks = milestone.tasks.all()
 
     data = {
+        "id": milestone.id,
         "title": milestone.title,
         "deadline": milestone.deadline.strftime("%Y-%m-%d") if milestone.deadline else None,
         "progress": milestone.progress,
@@ -640,3 +745,80 @@ def update_project(request, project_id):
         print("SERVER ERROR:", e)
         return JsonResponse({'success': False, 'error': str(e)})
     
+
+@login_required
+def search_users(request):
+    query = request.GET.get('q', '')
+    project_id = request.GET.get('project_id') # Wir senden die ID vom Frontend mit
+    
+    if len(query) < 3:
+        return JsonResponse({'users': []})
+    
+    # Find user with respective email
+    user_qs = User.objects.filter(email__icontains=query)
+    
+    # Exclude all existing team members
+    if project_id:
+        existing_members = ProjectMembership.objects.filter(
+            project_id=project_id
+        ).values_list('user_id', flat=True)
+        
+        user_qs = user_qs.exclude(id__in=existing_members)
+    
+    # Do not include own ID
+    user_qs = user_qs.exclude(id=request.user.id)[:5]
+    
+    results = [{'email': u.email, 'username': u.username} for u in user_qs]
+    return JsonResponse({'users': results})
+    
+
+@login_required
+def delete_chat_history(request, project_id):
+    if request.method == 'POST':
+        project = get_object_or_404(Project, id=project_id)
+        
+        # Admin check
+        membership = ProjectMembership.objects.filter(
+            project=project, 
+            user=request.user
+        ).first()
+
+        if membership and membership.role == "ADMIN":
+            #Delete all messages
+            project.messages.all().delete()
+            
+    return redirect('project_dashboard', project_id=project_id)
+
+
+
+@login_required
+@require_POST
+def leave_project(request, project_id):
+    project = get_object_or_404(Project, id=project_id)
+    
+    # Find the specific membership for the logged-in user
+    membership = get_object_or_404(ProjectMembership, user=request.user, project=project)
+
+    # Logic: If user is ADMIN, check if there are other admins left
+    if membership.role == 'ADMIN':
+        admins_remaining = project.memberships.filter(role='ADMIN').exclude(user=request.user).count()
+        if admins_remaining == 0:
+            return JsonResponse({
+                'success': False, 
+                'message': 'You are the last Admin. You must appoint another Admin or delete the project instead.'
+            }, status=400)
+
+    # Delete the membership (this effectively removes the user from the project)
+    membership.delete()
+
+    # Log the activity
+    Update.objects.create(
+        project=project,
+        user=request.user,
+        text="left the project"
+    )
+
+    return JsonResponse({
+        'success': True,
+        'redirect_url': reverse('project_list') # Redirect to your project overview
+    })

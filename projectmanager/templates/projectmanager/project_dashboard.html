@@ -9,7 +9,6 @@
 {% block content %}
 <div class="project-header">
 
-    <!-- Linke Seite: Titel + Icons -->
     <div class="project-title-actions">
         <h1 class="project-title">{{ project.title }}</h1>
 
@@ -26,8 +25,17 @@
         </div>
     </div>
 
-    <!-- Rechte Seite: Team-Mitglieder -->
-    <div class="team-members">
+    <div class="team-members" style="display: flex; align-items: center; gap: 10px;">
+        
+        <button class="js-leave-project icon-btn leave-btn" 
+                data-url="{% url 'leave_project' project.id %}" 
+                title="Leave Project">
+            🚪
+            <span class="icon-label">Leave</span>
+        </button>
+
+        <div style="width: 1px; height: 25px; background-color: #ddd; margin: 0 5px;"></div>
+
         {% for member in memberships %}
             <div class="team-member {% if member.role == 'ADMIN' %}admin{% endif %}" title="{{ member.user.username }}">
                 <img src="{% static 'projectmanager/img/default-avatar.png' %}" alt="{{ member.user.username }}">
@@ -41,90 +49,222 @@
 
 </div>
 
-<div id="addMemberModal" class="modal" style="display:none;">
-    <div class="modal-content">
-        <span class="close">&times;</span>
-        <form method="post" action="{% url 'add_member' project.id %}">
-            {% csrf_token %}
-            <input type="email" name="email" placeholder="user@example.com" required>
-            <button type="submit">Invite</button>
-        </form>
-    </div>
-</div>
+
 
 <script>
-const addBtn = document.querySelector('.add-member-btn');
+// --- Globale Variablen & Initialisierung ---
 const addMemberModal = document.getElementById('addMemberModal');
-const addModalClose = addMemberModal.querySelector('.close');
+const emailInput = document.getElementById('email-search-input');
+const resultsDiv = document.getElementById('search-results');
+const projectId = "{{ project.id }}"; // Django Template Variable
 
-addBtn?.addEventListener('click', () => addMemberModal.style.display = 'block');
-addModalClose?.addEventListener('click', () => addMemberModal.style.display = 'none');
-window.addEventListener('click', e => {
-    if(e.target == addMemberModal) addMemberModal.style.display = 'none';
+// --- 1. MODAL STEUERUNG ---
+function openAddMemberModal() {
+    if (addMemberModal) {
+        addMemberModal.style.display = 'flex';
+        addMemberModal.classList.add('active');
+        if (emailInput) emailInput.focus(); // Direkt ins Feld springen
+    }
+}
+
+function closeAddMemberModal() {
+    if (addMemberModal) {
+        addMemberModal.style.display = 'none';
+        resetSearch();
+    }
+}
+
+function resetSearch() {
+    if (emailInput) emailInput.value = '';
+    if (resultsDiv) {
+        resultsDiv.innerHTML = '';
+        resultsDiv.classList.add('hidden');
+    }
+}
+
+// Event-Listener für Dashboard-Buttons (delegiert)
+document.addEventListener('click', function(e) {
+    // Öffnen-Button
+    if (e.target.closest('.add-member-btn')) {
+        openAddMemberModal();
+    }
+    // Schließen-Button (X)
+    if (e.target.closest('#addMemberModal .close')) {
+        closeAddMemberModal();
+    }
+    // Außerhalb des Modals klicken
+    if (e.target === addMemberModal) {
+        closeAddMemberModal();
+    }
+    // Klick außerhalb der Suchergebnisse schließt das Dropdown
+    if (emailInput && e.target !== emailInput && resultsDiv) {
+        resultsDiv.classList.add('hidden');
+    }
 });
+
+// --- 2. LIVE SUCHE LOGIK ---
+if (emailInput) {
+    emailInput.addEventListener('input', function() {
+        const query = this.value.trim();
+
+        // Erst ab 3 Zeichen suchen
+        if (query.length < 3) {
+            resultsDiv.classList.add('hidden');
+            return;
+        }
+
+        // Optisches Feedback: "Suche..." anzeigen
+        resultsDiv.innerHTML = '<div class="search-info">🔍 Searching for members...</div>';
+        resultsDiv.classList.remove('hidden');
+
+        fetch(`/search-users/?q=${encodeURIComponent(query)}&project_id=${projectId}`, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.users && data.users.length > 0) {
+                // Ergebnisse rendern
+                resultsDiv.innerHTML = data.users.map(user => `
+                    <div class="search-item" onclick="selectUser('${user.email}')">
+                        <div class="item-info">
+                            <span class="item-email">${user.email}</span>
+                            <span class="item-username">@${user.username}</span>
+                        </div>
+                        <span class="item-action">Invite ➕</span>
+                    </div>
+                `).join('');
+            } else {
+                // Optisches Feedback: Nichts gefunden
+                resultsDiv.innerHTML = `
+                    <div class="search-info">
+                        <span style="color: #ef4444;">No users found.</span><br>
+                        <small>Make sure the email is correct.</small>
+                    </div>`;
+            }
+            resultsDiv.classList.remove('hidden');
+        })
+        .catch(err => {
+            console.error("Search error:", err);
+            resultsDiv.innerHTML = '<div class="search-info" style="color:red;">Error connecting to server.</div>';
+        });
+    });
+}
+
+// Funktion zur Auswahl eines Users
+function selectUser(email) {
+    if (emailInput) {
+        emailInput.value = email;
+        resultsDiv.classList.add('hidden');
+        // Optional: Formular direkt absenden
+        // document.getElementById('add-member-form').submit();
+    }
+}
 </script>
 
 
 <!-- Filter Modal -->
-<div id="filter-modal" class="modal" style="display:none;">
-    <div class="modal-content">
+<div id="filter-modal" class="modal">
+    <div class="modal-content compact-modal">
         <span class="close" id="close-filter">&times;</span>
         
-        <h2>Filter Tasks</h2>
-        <form method="get">
-            <!-- Status -->
-            <select name="status">
-                <option value="">All Status</option>
-                <option value="TODO" {% if request.GET.status == "TODO" %}selected{% endif %}>To Do</option>
-                <option value="IN_PROGRESS" {% if request.GET.status == "IN_PROGRESS" %}selected{% endif %}>In Progress</option>
-                <option value="DONE" {% if request.GET.status == "DONE" %}selected{% endif %}>Done</option>
-            </select>
+        <h2 style="margin-bottom: 5px;">🔍 Filter Tasks</h2>
+        <p style="color: #6b7280; font-size: 0.9rem; margin-bottom: 20px;">
+            Narrow down the tasks you want to see.
+        </p>
 
-            <!-- Assigned -->
-            <select name="assigned">
-                <option value="">All Members</option>
-                {% for member in memberships %}
-                    <option value="{{ member.user.id }}" {% if request.GET.assigned == member.user.id|stringformat:"s" %}selected{% endif %}>
-                        {{ member.user.username }}
-                    </option>
-                {% endfor %}
-            </select>
+        <form method="get" class="styled-form">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Status</label>
+                    <select name="status">
+                        <option value="">All Status</option>
+                        <option value="TODO" {% if request.GET.status == "TODO" %}selected{% endif %}>To Do</option>
+                        <option value="IN_PROGRESS" {% if request.GET.status == "IN_PROGRESS" %}selected{% endif %}>In Progress</option>
+                        <option value="DONE" {% if request.GET.status == "DONE" %}selected{% endif %}>Done</option>
+                    </select>
+                </div>
 
-            <!-- Priority -->
-            <select name="priority">
-                <option value="">All Priorities</option>
-                <option value="LOW" {% if request.GET.priority == "LOW" %}selected{% endif %}>Low</option>
-                <option value="MEDIUM" {% if request.GET.priority == "MEDIUM" %}selected{% endif %}>Medium</option>
-                <option value="HIGH" {% if request.GET.priority == "HIGH" %}selected{% endif %}>High</option>
-                <option value="URGENT" {% if request.GET.priority == "URGENT" %}selected{% endif %}>Urgent</option>
-            </select>
+                <div class="form-group">
+                    <label>Assigned to</label>
+                    <select name="assigned">
+                        <option value="">All Members</option>
+                        {% for member in memberships %}
+                            <option value="{{ member.user.id }}" {% if request.GET.assigned == member.user.id|stringformat:"s" %}selected{% endif %}>
+                                {{ member.user.username }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
 
-            <!-- Sort -->
-            <select name="sort">
-                <option value="">Sort By</option>
-                <option value="deadline" {% if request.GET.sort == "deadline" %}selected{% endif %}>Deadline ↑</option>
-                <option value="deadline_desc" {% if request.GET.sort == "deadline_desc" %}selected{% endif %}>Deadline ↓</option>
-                <option value="status" {% if request.GET.sort == "status" %}selected{% endif %}>Status</option>
-            </select>
+                <div class="form-group">
+                    <label>Priority</label>
+                    <select name="priority">
+                        <option value="">All Priorities</option>
+                        <option value="LOW" {% if request.GET.priority == "LOW" %}selected{% endif %}>Low</option>
+                        <option value="MEDIUM" {% if request.GET.priority == "MEDIUM" %}selected{% endif %}>Medium</option>
+                        <option value="HIGH" {% if request.GET.priority == "HIGH" %}selected{% endif %}>High</option>
+                        <option value="URGENT" {% if request.GET.priority == "URGENT" %}selected{% endif %}>Urgent</option>
+                    </select>
+                </div>
 
-            <button type="submit">Apply</button>
+                <div class="form-group">
+                    <label>Sort by</label>
+                    <select name="sort">
+                        <option value="">Default</option>
+                        <option value="deadline" {% if request.GET.sort == "deadline" %}selected{% endif %}>Deadline ↑</option>
+                        <option value="deadline_desc" {% if request.GET.sort == "deadline_desc" %}selected{% endif %}>Deadline ↓</option>
+                        <option value="status" {% if request.GET.sort == "status" %}selected{% endif %}>Status</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-actions" style="margin-top: 20px;">
+                <a href="{% url 'project_dashboard' project.id %}" class="btn-secondary" style="text-decoration: none; font-size: 0.9rem;">Clear All</a>
+                <button type="submit" class="btn-primary">Apply Filters</button>
+            </div>
         </form>
     </div>
 </div>
 
 <!-- Project Details Modal -->
-<div id="details-modal" class="modal" style="display:none;">
+<div id="details-modal" class="modal">
     <div class="modal-content">
         <span class="close" id="close-details">&times;</span>
-        <h2>{{ project.title }} - Details</h2>
-        <p><strong>Goal:</strong> {{ project.goal }}</p>
-        <p><strong>Deadline:</strong> {{ project.end_date }}</p>
-        <p><strong>Team Members:</strong> 
-            {% for member in memberships %}
-                {{ member.user.username }}{% if not forloop.last %}, {% endif %}
-            {% endfor %}
-        </p>
-        <p><strong>Status:</strong> {{ project.status }}</p>
+        
+        <div class="modal-header-area">
+            <h2 class="modal-title">🚀 {{ project.title }}</h2>
+            <span class="status-badge-large">{{ project.status }}</span>
+        </div>
+
+        <div class="details-grid">
+            <div class="detail-item full-width">
+                <label>🎯 Project Goal</label>
+                <div class="detail-value goal-text">{{ project.goal }}</div>
+            </div>
+
+            <div class="detail-item">
+                <label>📅 Deadline</label>
+                <div class="detail-value">{{ project.end_date|date:"d. F Y" }}</div>
+            </div>
+
+            <div class="detail-item full-width">
+                <label>👥 Team Members</label>
+                <div class="team-badge-container">
+                    {% for member in memberships %}
+                        <div class="user-badge">
+                            <span class="user-avatar">{{ member.user.username|slice:":1"|upper }}</span>
+                            <span class="user-name">{{ member.user.username }}</span>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="form-actions" style="margin-top: 30px; border-top: 1px solid #f3f4f6; padding-top: 20px;">
+            <button type="button" onclick="document.getElementById('details-modal').classList.remove('active')" class="btn-primary">
+                Close Details
+            </button>
+        </div>
     </div>
 </div>
 
@@ -134,14 +274,28 @@ function setupModal(buttonId, modalId, closeId) {
     const modal = document.getElementById(modalId);
     const close = document.getElementById(closeId);
 
-    btn.onclick = () => modal.style.display = "block";
-    close.onclick = () => modal.style.display = "none";
-
-    window.onclick = (event) => {
-        if (event.target == modal) modal.style.display = "none";
+    if (btn && modal) {
+        
+        btn.onclick = () => {
+            modal.classList.add("active");
+        };
     }
+
+    if (close) {
+        close.onclick = () => {
+            modal.classList.remove("active");
+        };
+    }
+
+    // Schließen beim Klick auf den dunklen Hintergrund
+    window.addEventListener('click', (event) => {
+        if (event.target == modal) {
+            modal.classList.remove("active");
+        }
+    });
 }
 
+// Initialisierung für deine Modale
 setupModal("open-filter-modal", "filter-modal", "close-filter");
 setupModal("open-details-modal", "details-modal", "close-details");
 </script>
@@ -151,11 +305,60 @@ setupModal("open-details-modal", "details-modal", "close-details");
 
 {% if user_role != "VIEWER" %}
 <p>
-    <a href="{% url 'create_task' project.id %}" class="btn-primary">
+    <button onclick="openCreateTaskModal()" class="btn-primary">
         ➕ Add New Task
-    </a>
+    </button>
 </p>
 {% endif %}
+
+<div id="create-task-modal" class="modal" style="display:none;">
+    <div class="modal-content compact-modal">
+        <span onclick="closeCreateTaskModal()" class="close">&times;</span>
+        <h2 style="margin-bottom: 15px; font-size: 1.4rem;">🚀 New Task</h2>
+        
+        <form method="post" action="{% url 'create_task' project.id %}" class="styled-form">
+            {% csrf_token %}
+            
+            <div class="form-group">
+                <label>Title</label>
+                {{ task_form.title }}
+            </div>
+
+            <div class="form-group">
+                <label>Description</label>
+                {{ task_form.description }}
+            </div>
+
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Deadline</label>
+                    {{ task_form.deadline }}
+                </div>
+                <div class="form-group">
+                    <label>Assigned to</label>
+                    {{ task_form.assigned_to }}
+                </div>
+                <div class="form-group">
+                    <label>Status</label>
+                    {{ task_form.status }}
+                </div>
+                <div class="form-group">
+                    <label>Priority</label>
+                    {{ task_form.priority }}
+                </div>
+                <div class="form-group full-width">
+                    <label>Milestone</label>
+                    {{ task_form.milestone }}
+                </div>
+            </div>
+
+            <div class="form-actions" style="margin-top: 15px;">
+                <button type="button" onclick="closeCreateTaskModal()" class="btn-secondary">Cancel</button>
+                <button type="submit" class="btn-primary">Create Task</button>
+            </div>
+        </form>
+    </div>
+</div>
 
 <div class="kanban-board">
 
@@ -231,6 +434,34 @@ setupModal("open-details-modal", "details-modal", "close-details");
     font-size: 2rem;
 }
 
+/* Styling für den Leave-Button im Header */
+.leave-btn {
+    color: #e67e22; /* Ein dezentes Orange */
+    transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.leave-btn:hover {
+    color: #d35400; /* Dunkleres Orange beim Hover */
+    transform: scale(1.1);
+}
+
+/* Falls dein icon-btn Styling noch nicht flexibel genug ist: */
+.icon-btn {
+    background: none;
+    border: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    font-size: 1.2rem;
+}
+
+.icon-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    margin-top: 2px;
+}
+
 /* ================= Projekt-Icons ================= */
 .project-actions {
     display: flex;        /* Icons nebeneinander */
@@ -296,6 +527,66 @@ setupModal("open-details-modal", "details-modal", "close-details");
     transform: scale(1.1);
 }
 
+
+
+/* Styling für das Such-Dropdown */
+#search-results {
+    position: absolute;
+    width: 100%;
+    background: white;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    z-index: 100;
+    max-height: 250px;
+    overflow-y: auto;
+    margin-top: 5px;
+}
+
+/* Einzelnes Ergebnis */
+.search-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    cursor: pointer;
+    transition: background 0.2s;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.search-item:hover {
+    background-color: #f0fdf4; 
+}
+
+.search-item .item-email {
+    display: block;
+    font-weight: 600;
+    color: #1f2937;
+    font-size: 0.9rem;
+}
+
+.search-item .item-username {
+    font-size: 0.75rem;
+    color: #6b7280;
+}
+
+.search-item .item-action {
+    font-size: 0.75rem;
+    color: #22c55e;
+    font-weight: 700;
+}
+
+.search-info {
+    padding: 15px;
+    text-align: center;
+    font-size: 0.85rem;
+    color: #6b7280;
+}
+
+.hidden {
+    display: none !important;
+}
+
 /* ================= Add-Member Button ================= */
 .add-member-btn {
     background-color: #22c55e;
@@ -318,30 +609,156 @@ setupModal("open-details-modal", "details-modal", "close-details");
 }
 
 /* ================= Modal ================= */
+/* Grundstruktur für ALLE Modale */
 .modal {
     position: fixed;
-    z-index: 1000;
-    left: 0; top: 0; width: 100%; height: 100%;
-    overflow: auto;
-    background-color: rgba(0,0,0,0.5); /* Hintergrund verblassen */
+    z-index: 2000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    
+    
+    display: none; 
+    align-items: center;
+    justify-content: center;
+    overflow: auto; 
 }
-.modal.active{
-    display:flex;
+
+
+.modal.active {
+    display: flex !important;
 }
+
 
 .modal-content {
     background-color: #fff;
-    margin: 10% auto;
-    padding: 20px;
-    border-radius: 10px;
-    width: 50%;
+    padding: 30px;
+    border-radius: 16px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    width: 90%;
+    max-width: 500px; 
+    position: relative;
+    margin: auto; 
+}
+
+.modal-content.large {
+    max-width: 800px;
 }
 
 .close {
-    float: right;
-    font-size: 24px;
-    cursor: pointer;
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    font-size: 28px;
+    font-weight: bold;
+    color: #9ca3af;
+    line-height: 1;
+    
+    
+    cursor: pointer;           
+    user-select: none;         
+    display: inline-block;     
+    
+    transition: color 0.2s, transform 0.2s;
 }
+
+.close:hover {
+    color: #1f2937;           
+    transform: scale(1.1);     
+}
+
+/* Header im Modal */
+.modal-header-area {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.status-badge-large {
+    background-color: #f0fdf4; /* Hellgrün */
+    color: #22c55e;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+/* Grid Layout für Details */
+.details-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.detail-item label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #9ca3af;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+}
+
+.detail-value {
+    color: #1f2937;
+    font-size: 1rem;
+}
+
+.goal-text {
+    line-height: 1.6;
+    background: #f9fafb;
+    padding: 15px;
+    border-radius: 10px;
+}
+
+.full-width {
+    grid-column: span 2;
+}
+
+/* Team Badges */
+.team-badge-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.user-badge {
+    display: flex;
+    align-items: center;
+    background: #f3f4f6;
+    padding: 4px 12px 4px 6px;
+    border-radius: 20px;
+    border: 1px solid #e5e7eb;
+}
+
+.user-avatar {
+    width: 24px;
+    height: 24px;
+    background: #22c55e; /* Dein Grün */
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: bold;
+    margin-right: 8px;
+}
+
+.user-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #374151;
+}
+
+
 
 /* ================= Kanban Board ================= */
 .kanban-board {
@@ -455,13 +872,66 @@ setupModal("open-details-modal", "details-modal", "close-details");
     border-radius: 3px;
 }
 
+.task-selection-list {
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    max-height: 180px; /* Begrenzt die Höhe, verhindert Scrollen des Modals */
+    overflow-y: auto;
+    background-color: #f9fafb;
+    padding: 5px;
+}
+
+/* Einzelnes Item in der Liste */
+.task-checkbox-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    margin-bottom: 4px;
+    border-radius: 6px;
+    background: white;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.task-checkbox-item:hover {
+    background-color: #f0fdf4; /* CourseCrew Grün hell */
+    border-color: #22c55e;
+}
+
+.task-checkbox-item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    margin-right: 12px;
+    cursor: pointer;
+    accent-color: #22c55e; /* Dein Branding-Grün */
+}
+
+.task-checkbox-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.task-checkbox-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.task-checkbox-meta {
+    font-size: 0.75rem;
+    color: #6b7280;
+}
+
+
 
 /* ================= Chat ================= */
 /* Chat Slide-Out */
+/* --- Chat Slideout Basis --- */
 #chat-slideout {
     position: fixed;
     top: 0;
-    right: -400px; /* versteckt außerhalb des Bildschirms */
+    right: -400px;
     width: 400px;
     height: 100%;
     background: white;
@@ -470,76 +940,133 @@ setupModal("open-details-modal", "details-modal", "close-details");
     flex-direction: column;
     transition: right 0.3s ease;
     z-index: 1000;
-    font-family: Arial, sans-serif;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-/* Header */
+/* --- Überarbeiteter Header --- */
 #chat-slideout .chat-header {
     background: #22c55e;
     color: white;
-    padding: 15px;
+    padding: 12px 15px;
     display: flex;
-    justify-content: space-between;
+    justify-content: space-between; /* Titel links, Actions rechts */
     align-items: center;
-    font-weight: bold;
-    font-size: 16px;
+    border-bottom: 1px solid rgba(0,0,0,0.1);
 }
 
-#chat-slideout .chat-header button {
+/* Titel innerhalb des Headers */
+.chat-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+/* Container für die Buttons rechts */
+.chat-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px; /* Abstand zwischen Mülleimer und X */
+}
+
+/* Gemeinsames Design für alle Icons im Header */
+.btn-icon {
     background: none;
     border: none;
     color: white;
-    font-size: 20px;
     cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    opacity: 0.85;
 }
 
-/* Chat Window */
+.btn-icon:hover {
+    opacity: 1;
+    transform: scale(1.2);
+}
+
+/* Spezielles Styling für den Lösch-Button */
+.btn-delete {
+    font-size: 1.1rem;
+}
+
+.btn-delete:hover {
+    color: #fee2e2; /* Leichtes Rot-Weiß beim Hover */
+}
+
+/* Spezielles Styling für das X */
+.btn-close {
+    font-size: 1.5rem;
+    line-height: 1;
+}
+
+/* Damit das Form-Tag das Layout nicht stört */
+.delete-form {
+    display: flex;
+    margin: 0;
+}
+
+/* --- Chat Window & Messages (Bleiben fast gleich) --- */
 #chat-slideout .chat-window {
     flex: 1;
-    padding: 10px;
+    padding: 15px;
     overflow-y: auto;
-    background: #f1f5f9;
+    background: #f8fafc; /* Etwas helleres Grau für modernen Look */
 }
 
-/* Chat Messages */
 #chat-slideout .chat-message {
-    margin-bottom: 8px;
-    padding: 5px 10px;
+    margin-bottom: 10px;
+    padding: 8px 12px;
     background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    border-radius: 12px; /* Rundere Ecken wirken moderner */
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    font-size: 14px;
+    line-height: 1.4;
 }
 
-/* Chat Form */
+#chat-slideout .chat-message strong {
+    color: #16a34a;
+    display: block; /* Username über der Nachricht */
+    margin-bottom: 2px;
+    font-size: 12px;
+}
+
+/* --- Rest (Form & Toggle) bleibt wie gehabt --- */
 #chat-slideout form {
     display: flex;
-    padding: 10px;
-    border-top: 1px solid #ccc;
+    padding: 15px;
+    border-top: 1px solid #e2e8f0;
     gap: 0.5rem;
 }
 
 #chat-slideout form input {
     flex: 1;
-    padding: 8px 12px;
-    border-radius: 8px;
-    border: 1px solid #ccc;
+    padding: 10px 14px;
+    border-radius: 20px; /* Pill-Shape Input */
+    border: 1px solid #cbd5e1;
+    outline: none;
+}
+
+#chat-slideout form input:focus {
+    border-color: #22c55e;
 }
 
 #chat-slideout form button {
     background: #22c55e;
     color: white;
     border: none;
-    padding: 8px 12px;
-    border-radius: 8px;
+    width: 40px; /* Runder Button für "Send" */
+    height: 40px;
+    border-radius: 50%;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: background 0.2s;
 }
 
-#chat-slideout form button:hover {
-    background: #16a34a;
-}
-
-/* Floating Chat Button */
 #chat-toggle {
     position: fixed;
     bottom: 20px;
@@ -552,19 +1079,15 @@ setupModal("open-details-modal", "details-modal", "close-details");
     font-size: 28px;
     border: none;
     cursor: pointer;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
     z-index: 1001;
-    transition: opacity 0.3s ease;
+    transition: all 0.3s ease;
 }
 
-#chat-toggle.hidden{
+#chat-toggle.hidden {
     opacity: 0;
+    transform: scale(0.5); /* Schrumpft beim Verschwinden */
     pointer-events: none;
-}
-
-#chat-toggle:hover {
-    transform: scale(1.1);
-    background-color: #16a34a;
 }
 
 .modal-content.large {
@@ -587,31 +1110,139 @@ setupModal("open-details-modal", "details-modal", "close-details");
 .task-board {
     display: flex;
     gap: 20px;
-    margin-top: 20px;
+    align-items: flex-start; /* Verhindert, dass Spalten ungleich lang gezogen werden */
 }
 
 .task-column {
     flex: 1;
-    background: #f9f9f9;
-    border-radius: 10px;
-    padding: 15px;
-}
-
-.task-card {
-    background: white;
+    background: #f4f5f7;
     padding: 10px;
     border-radius: 8px;
-    margin-bottom: 10px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column; /* Erzwingt das Stapeln untereinander */
+    gap: 10px;             /* Abstand zwischen den Karten */
+    min-width: 200px;
 }
 
-/* Priority Colors */
-.task-card.high { border-left: 4px solid orange; }
-.task-card.urgent { border-left: 4px solid red; }
+.task-column h3 {
+    font-size: 1rem;
+    margin-bottom: 10px;
+    text-align: center;
+    color: #444;
+}
+
+/* Die Task-Karte im Meilenstein-Modal */
+.task-card.open-task-modal {
+    display: block;        /* Nimmt die ganze Breite ein */
+    width: 100%;           /* Sicherheitshalber volle Breite */
+    background: white;
+    padding: 12px;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    text-decoration: none;
+    color: #333;
+    box-sizing: border-box; /* Wichtig, damit Padding die Breite nicht sprengt */
+    transition: transform 0.1s ease;
+}
+
+.task-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+/* Prioritäts-Indikatoren (linksbündiger Streifen) */
+.task-card.low { border-left: 4px solid #10b981; }
+.task-card.medium { border-left: 4px solid #3b82f6; }
+.task-card.high { border-left: 4px solid #f59e0b; }
+.task-card.urgent { border-left: 4px solid #ef4444; }
+
+/* Styling für den Text innerhalb der Karte */
+.task-card strong {
+    display: block;       /* Titel in eigene Zeile */
+    margin-bottom: 4px;
+    font-size: 0.95rem;
+}
+
+.task-card span {
+    font-size: 0.75rem;
+    color: #666;
+    text-transform: uppercase;
+}
 
 .hidden {
     display: none !important; /* Blendet das Element komplett aus */
 }
+/* Das Modal-Fenster selbst */
+.compact-modal {
+    max-width: 600px !important; /* Etwas breiter für das 2-Spalten-Layout */
+    padding: 20px 30px !important;
+    border-radius: 12px;
+}
+
+/* Die Grid-Struktur für die kleinen Felder */
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* Zwei gleich große Spalten */
+    gap: 12px; /* Weniger Abstand zwischen den Feldern */
+}
+
+.full-width {
+    grid-column: span 2; /* Milestone geht wieder über beide Spalten */
+}
+
+/* Kompakteres Styling für Labels und Inputs */
+.styled-form .form-group {
+    margin-bottom: 10px; /* Deutlich weniger Margin als vorher */
+}
+
+.styled-form label {
+    font-size: 0.85rem;
+    margin-bottom: 4px;
+    color: #4b5563;
+}
+
+.styled-form input, 
+.styled-form select, 
+.styled-form textarea {
+    padding: 8px 12px !important; /* Kompakteres Padding */
+    font-size: 0.9rem !important;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+}
+
+/* Beschreibungstext-Feld klein halten */
+.styled-form textarea {
+    height: 60px; /* Feste, kleine Höhe */
+    resize: none;
+}
+
+.comment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.btn-delete-small {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+    opacity: 0.6;
+    transition: opacity 0.2s, transform 0.2s;
+}
+
+.btn-delete-small:hover {
+    opacity: 1;
+    transform: scale(1.2);
+    color: #e74c3c;
+}
+
+.comment-item {
+    transition: opacity 0.3s ease; /* For the smooth deletion effect */
+}
+
+
+
 
 
 </style>
@@ -625,17 +1256,19 @@ setupModal("open-details-modal", "details-modal", "close-details");
         {% for milestone in milestones %}
         <div class="milestone-card" onclick="openMilestoneDetail({{ milestone.id }})">
             <strong>{{ milestone.title }}</strong>
-
-            <div>Deadline: {{ milestone.deadline }}</div>
-            <div>Tasks: {{ milestone.tasks.count }}</div>
-
-            <div class="milestone-progress">
-                <div class="progress-bar" style="width: {{ milestone.progress }}%;"></div>
+            
+        <div class="milestone-progress">
+            <div id="dashboard-progress-bar-{{ milestone.id }}" 
+                class="progress-bar" 
+                style="width: {{ milestone.progress }}%;">
             </div>
+        </div>
+        <small id="dashboard-progress-text-{{ milestone.id }}">{{ milestone.progress }}% completed</small>   
         </div>
         {% empty %}
         <p>No milestones yet.</p>
         {% endfor %}
+        
 
         <!-- Add Button -->
         {% if user_role != "VIEWER" %}
@@ -665,17 +1298,50 @@ setupModal("open-details-modal", "details-modal", "close-details");
 
 
 
-<div id="milestone-modal" class="modal" style="display:none;">
+<div id="milestone-modal" class="modal">
     <div class="modal-content">
         <span onclick="closeMilestoneModal()" class="close">&times;</span>
 
-        <h3>Create Milestone</h3>
+        <h2 style="margin-bottom: 5px;">🎯 New Milestone</h2>
+        <p style="color: #6b7280; font-size: 0.9rem; margin-bottom: 20px;">
+            Set a goal and group your existing tasks.
+        </p>
 
-        <form method="post" action="{% url 'create_milestone' project.id %}">
+        <form method="post" action="{% url 'create_milestone' project.id %}" class="styled-form">
             {% csrf_token %}
-            <input type="text" name="title" placeholder="Title" required>
-            <input type="date" name="deadline">
-            <button type="submit">Create</button>
+            
+            <div class="form-group">
+                <label>Milestone Title</label>
+                <input type="text" name="title" placeholder="e.g. Prototype Phase" required>
+            </div>
+
+            <div class="form-group">
+                <label>Target Deadline</label>
+                <input type="date" name="deadline">
+            </div>
+
+            <div class="form-group">
+                <label>Link Existing Tasks (Optional)</label>
+                <div class="task-selection-list">
+                    {% for task in tasks %}
+                        {% if not task.milestone %} <label class="task-checkbox-item">
+                            <input type="checkbox" name="linked_tasks" value="{{ task.id }}">
+                            <div class="task-checkbox-info">
+                                <span class="task-checkbox-title">{{ task.title }}</span>
+                                <span class="task-checkbox-meta">{{ task.get_status_display }} | {{ task.priority }}</span>
+                            </div>
+                        </label>
+                        {% endif %}
+                    {% empty %}
+                        <p class="empty-info">No unassigned tasks available.</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="form-actions" style="margin-top: 25px;">
+                <button type="button" onclick="closeMilestoneModal()" class="btn-secondary">Cancel</button>
+                <button type="submit" class="btn-primary">Create Milestone</button>
+            </div>
         </form>
     </div>
 </div>
@@ -703,12 +1369,26 @@ setupModal("open-details-modal", "details-modal", "close-details");
     {% csrf_token %}
     <button style="color:red;">Clear Activity Log </button>
 </form>
+{% endif %}
+
 
 <button id="chat-toggle">💬</button>
 <div id="chat-slideout">
     <div class="chat-header">
-        <h3>Project Chat</h3>
-        <button id="chat-close">&times;</button>
+        <h3 class="chat-title">Project Chat</h3>
+        
+        <div class="chat-actions">
+            {% if user_role == "ADMIN" %}
+                <form action="{% url 'delete_chat' project.id %}" method="POST" class="delete-form" onsubmit="return confirm('Really delete all messages?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-icon btn-delete" title="Delete chat">
+                        🗑️
+                    </button>
+                </form>
+            {% endif %}
+
+            <button id="chat-close" class="btn-icon btn-close">&times;</button>
+        </div>
     </div>
 
     <div class="chat-window" id="chat-log">
@@ -724,7 +1404,7 @@ setupModal("open-details-modal", "details-modal", "close-details");
     </div>
 
     <form id="chat-form">
-        <input type="text" id="chat-message-input" placeholder="Nachricht schreiben..." required>
+        <input type="text" id="chat-message-input" placeholder="Type message..." required>
         <button type="submit" id="chat-message-submit">Send</button>
     </form>
 </div>
@@ -747,7 +1427,8 @@ document.querySelectorAll('.open-task-modal').forEach(link => {
             .then(res => res.text())
             .then(html => {
                 modalBody.innerHTML = html;
-                modal.style.display = 'block';
+                modal.style.display = 'flex';
+                modal.classList.add('active');
 
                 // ===== Upload-Form im Modal binden =====
                 const uploadForm = modalBody.querySelector('#upload-attachment-form');
@@ -779,40 +1460,28 @@ document.querySelectorAll('.open-task-modal').forEach(link => {
     });
 });
 
-// Schließen-Button
-closeBtn.onclick = function() {
-    modal.style.display = 'none';
+// Funktion zum Schließen des Task-Modals
+function closeTaskModal() {
+    const taskModal = document.getElementById('taskModal');
+    taskModal.style.display = 'none';
+    taskModal.classList.remove('active'); // Falls du Flexbox nutzt
 }
 
-// Klick außerhalb des Modals schließt es
-window.onclick = function(event) {
-    if (event.target == modal) {
-        modal.style.display = 'none';
-    }
-}
-
+// Event Delegation für das Schließen (X-Button)
 document.addEventListener('click', function(e) {
-    if(e.target && e.target.classList.contains('delete-attachment-btn')) {
-        const attachmentId = e.target.dataset.attachmentId;
-        if(confirm('Are you sure you want to delete this file?')) {
-            fetch(`/attachments/${attachmentId}/delete/`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': getCookie('csrftoken'),
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            })
-            .then(res => res.json())
-            .then(data => {
-                if(data.success) {
-                    // Entferne die Zeile aus der Liste
-                    const li = e.target.closest('li');
-                    li.remove();
-                } else {
-                    alert('Failed to delete attachment.');
-                }
-            });
+    // Wenn das geklickte Element die Klasse "close" hat oder ein Kind davon ist
+    if (e.target.classList.contains('close') || e.target.closest('.close')) {
+        const modal = e.target.closest('.modal');
+        if (modal) {
+            modal.style.display = 'none';
+            modal.classList.remove('active');
         }
+    }
+
+    // Schließen beim Klick außerhalb (auf den dunklen Hintergrund)
+    if (e.target.classList.contains('modal')) {
+        e.target.style.display = 'none';
+        e.target.classList.remove('active');
     }
 });
 
@@ -863,55 +1532,255 @@ if (uploadForm) {
         .catch(err => console.error(err));
     });
 }
-document.querySelectorAll(".kanban-column").forEach(column => {
+document.addEventListener("DOMContentLoaded", function() {
+    document.querySelectorAll(".kanban-column").forEach(column => {
+        new Sortable(column, {
+            group: "kanban",
+            animation: 150,
+            onEnd: function (evt) {
+                const task = evt.item;
+                const taskId = task.dataset.taskId;
+                const newColumn = evt.to;
+                const newStatus = newColumn.dataset.status;
 
-    new Sortable(column, {
-        group: "kanban",
-        animation: 150,
-
-        onEnd: function (evt) {
-
-            const task = evt.item;
-            const taskId = task.dataset.taskId;
-
-            const newColumn = evt.to;
-            const newStatus = newColumn.dataset.status;
-
-            // ✅ Korrekte Template String-Syntax mit Backticks
-            fetch(`/tasks/${taskId}/update_status/`, {
-
-                method: "POST",
-
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-CSRFToken": getCookie("csrftoken"),
-                    "X-Requested-With": "XMLHttpRequest"
-                },
-
-                body: JSON.stringify({
-                    status: newStatus
+                fetch(`/tasks/${taskId}/update_status/`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": getCookie("csrftoken"),
+                        "X-Requested-With": "XMLHttpRequest"
+                    },
+                    body: JSON.stringify({ status: newStatus })
                 })
-
-            })
-            .then(res => res.json())
-            .then(data => {
-                if(!data.success){
-                    alert(data.error || "Could not update status");
-                    location.reload();
-                }
-            })
-            .catch(err => {
-                console.error(err);
-                alert("Error updating status");
-            });
-
-        }
-
+                .then(res => res.json())
+                .then(data => {
+                    if(data.success) {
+                        // 🔥 DIESER TEIL IST NEU:
+                        // Wenn der Server einen Meilenstein und neuen Progress mitschickt, UI updaten
+                        if (data.milestone_id && data.new_progress !== undefined) {
+                            updateMilestoneProgressUI(data.milestone_id, data.new_progress);
+                        }
+                    } else {
+                        alert(data.error || "Could not update status");
+                        location.reload();
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    alert("Error updating status");
+                });
+            }
+        });
     });
-
 });
 
 
+
+/**
+ * Global Event Listener for task comments.
+ * Uses Event Delegation to catch submissions from dynamically loaded modals.
+ */
+document.addEventListener('submit', function(event) {
+    // Check if the submitted form has our target class
+    const form = event.target.closest('.js-comment-form');
+    
+    if (form) {
+        // STOP the browser from redirecting/reloading the page
+        event.preventDefault();
+        event.stopPropagation();
+        
+        const taskId = form.getAttribute('data-task-id');
+        const formData = new FormData(form);
+        const url = form.getAttribute('action');
+        const submitBtn = form.querySelector('button');
+
+        console.log(`[DEBUG] Intercepted comment submission for Task ID: ${taskId}`);
+
+        // Disable button to prevent double-posting
+        submitBtn.disabled = true;
+
+        fetch(url, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest' // Tells Django this is an AJAX request
+            }
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Network response was not ok');
+            return response.json();
+        })
+        .then(data => {
+            if (data.status === 'success') {
+                console.log("[DEBUG] Comment saved via AJAX");
+
+                // Target the specific list for this task
+                const commentList = document.getElementById(`comment-list-${taskId}`);
+                
+                // Construct the HTML for the new comment
+                const newComment = document.createElement('div');
+                newComment.className = 'comment-item';
+                newComment.innerHTML = `
+                    <strong>${data.username}</strong>
+                    <p>${data.text}</p>
+                    <small>${data.created_at}</small>
+                `;
+
+                // Add the new comment to the top of the list
+                if (commentList) {
+                    commentList.prepend(newComment);
+                }
+                
+                // Clear the input field
+                form.reset();
+            } else {
+                console.error("[DEBUG] Server error:", data.message);
+                alert("Error: " + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('[DEBUG] Fetch operation failed:', error);
+            alert("Something went wrong. Please check your connection.");
+        })
+        .finally(() => {
+            // Re-enable the button
+            submitBtn.disabled = false;
+        });
+    }
+});
+
+
+document.addEventListener('click', function(event) {
+    // Check if the clicked element is our delete button
+    const deleteBtn = event.target.closest('.js-delete-comment');
+    
+    if (deleteBtn) {
+        if (!confirm('Are you sure you want to delete this comment?')) return;
+
+        const url = deleteBtn.getAttribute('data-url');
+        const commentId = deleteBtn.getAttribute('data-comment-id');
+        const commentElement = document.getElementById(`comment-${commentId}`);
+
+        console.log(`[DEBUG] Attempting to delete comment ID: ${commentId}`);
+
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': '{{ csrf_token }}' // Standard way to send CSRF in AJAX
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                console.log("[DEBUG] Comment deleted from DB");
+                
+                // Remove the comment from the UI with a small fade-out effect
+                if (commentElement) {
+                    commentElement.style.opacity = '0';
+                    setTimeout(() => commentElement.remove(), 300);
+                }
+            } else {
+                alert("Error: Could not delete comment.");
+            }
+        })
+        .catch(error => console.error('[DEBUG] Delete operation failed:', error));
+    }
+});
+
+/**
+ * Update your existing 'add comment' script:
+ * When a new comment is created via AJAX, make sure it also includes 
+ * the delete button in the innerHTML if you want it to be deletable immediately!
+ */
+
+
+/**
+ * Consolidated Script for Attachments (Upload & Delete)
+ */
+document.addEventListener('submit', function(e) {
+    const uploadForm = e.target.closest('#js-upload-form');
+    if (!uploadForm) return;
+
+    // 1. Prevent the double submission
+    e.preventDefault();
+    e.stopImmediatePropagation(); // Stops other scripts from handling this event
+
+    console.log("[DEBUG] Starting AJAX upload...");
+
+    const formData = new FormData(uploadForm);
+    const taskId = uploadForm.getAttribute('data-task-id');
+    const submitBtn = uploadForm.querySelector('button[type="submit"]');
+
+    submitBtn.disabled = true;
+
+    fetch(uploadForm.action, {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log("[DEBUG] Upload successful");
+            
+            // Build the new item exactly like your HTML
+            const list = document.getElementById(`attachment-list-${taskId}`);
+            const li = document.createElement('li');
+            li.className = 'attachment-item';
+            li.id = `attachment-${data.attachment_id}`;
+            li.innerHTML = `
+                <a href="${data.file_url}" download class="attachment-link">
+                    <span class="file-icon">${data.icon}</span>
+                    <span class="file-name">${data.file_name}</span>
+                </a>
+                <button type="button" class="js-delete-btn delete-attachment-btn" 
+                        data-id="${data.attachment_id}"
+                        data-url="/delete-attachment/${data.attachment_id}/">🗑️</button>
+            `;
+            
+            if (list) {
+                const empty = list.querySelector('.empty-info');
+                if (empty) empty.remove();
+                list.appendChild(li);
+            }
+            uploadForm.reset();
+        }
+    })
+    .catch(err => console.error("[DEBUG] Upload error:", err))
+    .finally(() => { submitBtn.disabled = false; });
+});
+
+/**
+ * Handle Deletion via Event Delegation
+ */
+document.addEventListener('click', function(e) {
+    const deleteBtn = e.target.closest('.js-delete-btn');
+    if (!deleteBtn) return;
+
+    if (!confirm("Delete this attachment?")) return;
+
+    const attachmentId = deleteBtn.getAttribute('data-id');
+    const url = deleteBtn.getAttribute('data-url');
+    const element = document.getElementById(`attachment-${attachmentId}`);
+
+    console.log(`[DEBUG] Deleting attachment #${attachmentId}`);
+
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': '{{ csrf_token }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success' || data.success) {
+            if (element) element.remove();
+        }
+    })
+    .catch(err => console.error("[DEBUG] Delete error:", err));
+});
 
 
 document.addEventListener("DOMContentLoaded", function() {
@@ -984,12 +1853,48 @@ document.addEventListener("DOMContentLoaded", function() {
 
 
 // Milestone Modal
+function updateMilestoneProgressUI(milestoneId, newProgress) {
+    if (!milestoneId) return;
+
+    // 1. Update auf dem DASHBOARD
+    const dashboardBar = document.getElementById(`dashboard-progress-bar-${milestoneId}`);
+    const dashboardText = document.getElementById(`dashboard-progress-text-${milestoneId}`);
+    
+    if (dashboardBar) {
+        dashboardBar.style.width = newProgress + "%";
+    }
+    if (dashboardText) {
+        // Sucht nach dem Prozent-Text (falls du die Struktur aus dem vorherigen Schritt hast)
+        dashboardText.innerText = newProgress + "%";
+    }
+
+    // 2. Update im MODAL (falls es gerade offen ist)
+    const modal = document.getElementById("milestone-detail-modal");
+    if (modal && modal.style.display === "block" && modal.dataset.milestoneId == milestoneId) {
+        const modalBar = modal.querySelector(".progress-bar");
+        const modalSpan = modal.querySelector(".progress-wrapper span");
+        
+        if (modalBar) modalBar.style.width = newProgress + "%";
+        if (modalSpan) modalSpan.innerText = newProgress + "% completed";
+    }
+}
+
+
+
+
+
 function openMilestoneModal() {
-    document.getElementById("milestone-modal").style.display = "block";
+    const modal = document.getElementById('milestone-modal');
+    if (modal) {
+        modal.classList.add('active'); 
+    }
 }
 
 function closeMilestoneModal() {
-    document.getElementById("milestone-modal").style.display = "none";
+    const modal = document.getElementById('milestone-modal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
 }
 
 // Milestone Details
@@ -998,8 +1903,13 @@ function openMilestoneDetail(id) {
         .then(res => res.json())
         .then(data => {
             renderMilestoneDetail(data);
-            document.getElementById("milestone-detail-modal").style.display = "block";
-        });
+            
+            const modal = document.getElementById("milestone-detail-modal");
+            if (modal) {
+                modal.classList.add("active");
+            }
+        })
+        .catch(err => console.error("Fehler beim Laden der Milestone-Details:", err));
 }
 
 function closeMilestoneDetail() {
@@ -1007,21 +1917,28 @@ function closeMilestoneDetail() {
 }
 
 function renderMilestoneDetail(data) {
+    console.log("Data from the server:", data)
     const todo = data.tasks.filter(t => t.status === "TODO");
     const inProgress = data.tasks.filter(t => t.status === "IN_PROGRESS");
     const done = data.tasks.filter(t => t.status === "DONE");
 
     const html = `
-        <div class="milestone-header">
+        <div class="milestone-header" style="display:flex; justify-content:space-between; align-items:center;">
             <h2>${data.title}</h2>
-            <button id="add-task-to-milestone" class="btn-small">➕ Add Task</button>
+            <div id="add-task-container">
+                <button id="btn-show-task-dropdown" class="btn-primary" style="font-size: 0.8rem; padding: 5px 10px;">
+                    ➕ Add Existing Task
+                </button>
+                <div id="task-dropdown-list" class="hidden" style="position:absolute; background:white; border:1px solid #ccc; z-index:100; padding:10px; border-radius:8px; box-shadow:0 4px 6px rgba(0,0,0,0.1); max-height:200px; overflow-y:auto;">
+                    </div>
+            </div>
         </div>
 
         <p>Deadline: ${data.deadline || "No deadline"}</p>
 
         <div class="progress-wrapper">
             <div class="progress-bar" style="width:${data.progress}%"></div>
-            <span>${data.progress}% completed</span>
+            <span style="font-size:0.8rem;">${data.progress}% completed</span>
         </div>
 
         <div class="task-board">
@@ -1033,42 +1950,88 @@ function renderMilestoneDetail(data) {
 
     const container = document.getElementById("milestone-detail-content");
     container.innerHTML = html;
+    
+    // Save Milestone ID for later access
+    document.getElementById("milestone-detail-modal").dataset.milestoneId = data.id;
 
-    // Event Listener für Task Cards
     bindTaskModalLinks();
-
-    // ⭐ Event Listener für Add-Task Button
-    const addBtn = document.getElementById("add-task-to-milestone");
-    if (addBtn) {
-        addBtn.onclick = () => {
-            const milestoneId = data.id;
-            openAddTaskDropdown(milestoneId); // deine Funktion zum Hinzufügen von Tasks
-        };
-    }
+    setupAddTaskLogic(data.id);
 }
 
-function bindAddTaskButton(milestoneId) {
-    const btn = document.getElementById('add-task-to-milestone');
-    if (!btn) return;
+function setupAddTaskLogic(milestoneId) {
+    const btn = document.getElementById("btn-show-task-dropdown");
+    const list = document.getElementById("task-dropdown-list");
 
-    btn.addEventListener('click', function() {
-        // Dein AJAX-Code, um Tasks hinzuzufügen
-        openAddTaskDropdown(milestoneId);
+    btn.onclick = () => {
+        if (list.classList.contains("hidden")) {
+            // Load available tasks
+            fetch(`/milestone/${milestoneId}/available_tasks/`)
+                .then(res => res.json())
+                .then(tasks => {
+                    if (tasks.length === 0) {
+                        list.innerHTML = "<small>No unassigned tasks found.</small>";
+                    } else {
+                        list.innerHTML = tasks.map(t => `
+                            <div class="task-option" data-id="${t.id}" style="padding:5px; cursor:pointer; border-bottom:1px solid #eee; font-size:0.9rem;">
+                                ${t.title}
+                            </div>
+                        `).join('');
+                        
+                        // Click on task option
+                        document.querySelectorAll(".task-option").forEach(opt => {
+                            opt.onclick = function() {
+                                const taskId = this.dataset.id;
+                                addTaskToMilestone(milestoneId, taskId);
+                            };
+                        });
+                    }
+                    list.classList.remove("hidden");
+                });
+        } else {
+            list.classList.add("hidden");
+        }
+    };
+}
+
+function addTaskToMilestone(milestoneId, taskId) {
+    fetch(`/milestone/${milestoneId}/add_task/${taskId}/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken'),
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            // UI Update für den Balken
+            updateMilestoneProgressUI(milestoneId, data.new_progress);
+            // Modal Inhalte neu laden
+            openMilestoneDetail(milestoneId); 
+        } else {
+            alert("Error: " + data.error);
+        }
     });
 }
 
+
 function renderColumn(title, tasks) {
+    // Falls keine Tasks vorhanden sind, zeigen wir eine kleine Info
+    const taskHtml = tasks.length > 0 
+        ? tasks.map(t => `
+            <a href="#" 
+               class="task-card open-task-modal ${t.priority.toLowerCase()}" 
+               data-task-id="${t.id}">
+                <strong>${t.title}</strong>
+                <span>${t.priority}</span>
+            </a>
+        `).join('')
+        : '<p style="text-align:center; color:#999; font-size:0.8rem;">No tasks</p>';
+
     return `
         <div class="task-column">
             <h3>${title}</h3>
-            ${tasks.map(t => `
-                <a href="#" 
-                   class="task-card open-task-modal ${t.priority.toLowerCase()}" 
-                   data-task-id="${t.id}">
-                    <strong>${t.title}</strong>
-                    <span>${t.priority}</span>
-                </a>
-            `).join('')}
+            ${taskHtml}
         </div>
     `;
 }
@@ -1123,38 +2086,117 @@ function bindTaskModalLinks() {
     });
 }
 
-//Add tasks within Milestone Modal
-document.getElementById('add-task-to-milestone').addEventListener('click', function() {
-    const milestoneId = document.getElementById('milestone-detail-modal').dataset.milestoneId;
+//Create new Task Modal
+function openCreateTaskModal() {
+    const modal = document.getElementById('create-task-modal');
+    if (modal) {
+        modal.style.display = 'flex'; 
+        modal.classList.add('active');
+    }
+}
 
-    // Fetch Tasks, die NICHT im Milestone sind
-    fetch(`/milestone/${milestoneId}/available_tasks/`)
-        .then(res => res.json())
-        .then(tasks => {
-            // Kleines Dropdown oder Prompt zur Auswahl
-            let taskOptions = tasks.map(t => `${t.id}: ${t.title}`).join('\n');
-            const selected = prompt(`Select task ID to add:\n${taskOptions}`);
-            if (!selected) return;
+function closeCreateTaskModal() {
+    document.getElementById("create-task-modal").style.display = "none";
+}
 
-            // Task zum Meilenstein hinzufügen via AJAX
-            fetch(`/milestone/${milestoneId}/add_task/${selected}/`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': csrftoken,
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    alert(`Task added!`);
-                    // Optional: Meilenstein-Modal neu laden / Task-Liste aktualisieren
-                    openMilestoneDetail(milestoneId);
-                } else {
-                    alert(`Error: ${data.error}`);
-                }
-            });
-        });
+
+window.onclick = function(event) {
+    const modal = document.getElementById("create-task-modal");
+    if (event.target == modal) {
+        modal.style.display = "none";
+    }
+    
+}
+
+
+/**
+ * Global Task Deletion Handler (Works for Dashboard AND Modal)
+ */
+document.addEventListener('click', function(event) {
+    // Wir suchen den Button oder ein Element darin (die Mülltonne selbst)
+    const deleteBtn = event.target.closest('.js-delete-task');
+    
+    // Wenn nicht auf einen Lösch-Button geklickt wurde, brich ab
+    if (!deleteBtn) return;
+
+    // Verhindere Standard-Aktionen (wie Links)
+    event.preventDefault();
+
+    // Bestätigung abfragen
+    if (!confirm("Are you sure you want to delete this task?")) {
+        return;
+    }
+
+    const url = deleteBtn.getAttribute('data-url');
+    const taskId = deleteBtn.getAttribute('data-task-id');
+
+    console.log(`[DEBUG] Attempting to delete Task #${taskId} via URL: ${url}`);
+
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': '{{ csrf_token }}'
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            console.log("[DEBUG] Task deleted successfully.");
+            // Seite neu laden, um das Dashboard zu aktualisieren
+            window.location.href = data.redirect_url;
+        } else {
+            alert("Error: " + (data.message || "Unknown error occurred."));
+        }
+    })
+    .catch(error => {
+        console.error('[DEBUG] Fetch error:', error);
+        alert("An error occurred. Please check the console (F12).");
+    });
+});
+
+
+/**
+ * AJAX Handler for leaving a project
+ */
+document.addEventListener('click', function(event) {
+    const leaveBtn = event.target.closest('.js-leave-project');
+    if (!leaveBtn) return;
+
+    event.preventDefault();
+
+    // English confirmation
+    if (!confirm("Are you sure you want to leave this project? This cannot be undone.")) {
+        return;
+    }
+
+    const url = leaveBtn.getAttribute('data-url');
+
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': '{{ csrf_token }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log("[DEBUG] Left project successfully.");
+            window.location.href = data.redirect_url;
+        } else {
+            // Show the error message (e.g. if last Admin)
+            alert("Error: " + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('[DEBUG] Leave Project Error:', error);
+    });
 });
 
 
@@ -1163,5 +2205,5 @@ document.getElementById('add-task-to-milestone').addEventListener('click', funct
 
 
 
-{% endif %}
+
 {% endblock %}

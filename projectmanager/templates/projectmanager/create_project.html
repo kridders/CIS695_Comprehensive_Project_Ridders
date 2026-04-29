@@ -1,13 +1,134 @@
 {% extends 'projectmanager/base.html' %}
+{% load static %}
 
 {% block title %}Create Project{% endblock %}
 
 {% block content %}
-<h1>Create New Project</h1>
+<div class="form-container">
+    <div class="form-card">
+        <div class="form-header">
+            <h1>🚀 New Project</h1>
+            <p>Define the goals and timeline for your group work.</p>
+        </div>
 
-<form method="post">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Save Project</button>
-</form>
+        <form method="post" class="styled-form">
+            {% csrf_token %}
+            
+            {% for field in form %}
+                <div class="form-group">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.help_text %}
+                        <small class="help-text">{{ field.help_text }}</small>
+                    {% endif %}
+                    {% if field.errors %}
+                        <div class="field-errors">
+                            {{ field.errors }}
+                        </div>
+                    {% endif %}
+                </div>
+            {% endfor %}
+
+            <div class="form-actions">
+                <a href="{% url 'project_list' %}" class="btn-secondary">Cancel</a>
+                <button type="submit" class="btn-primary">Create Project</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    /* Zentrierung auf der Seite */
+    .form-container {
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        padding-top: 50px;
+        min-height: 80vh;
+        background-color: #f9fafb;
+    }
+
+    .form-card {
+        background: white;
+        padding: 40px;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+        width: 100%;
+        max-width: 500px;
+    }
+
+    .form-header h1 {
+        margin: 0 0 10px 0;
+        font-size: 1.8rem;
+        color: #111827;
+    }
+
+    .form-header p {
+        color: #6b7280;
+        margin-bottom: 30px;
+    }
+
+    /* Styling der Django-Inputs */
+    .styled-form .form-group {
+        margin-bottom: 20px;
+    }
+
+    .styled-form label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #374151;
+    }
+
+    /* Hier sprechen wir die Inputs an, die Django generiert */
+    .styled-form input, 
+    .styled-form textarea, 
+    .styled-form select {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 1rem;
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .styled-form input:focus {
+        outline: none;
+        border-color: #22c55e;
+        box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+    }
+
+    .help-text {
+        color: #9ca3af;
+        font-size: 0.85rem;
+    }
+
+    /* Buttons */
+    .form-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 15px;
+        margin-top: 30px;
+    }
+
+    .btn-secondary {
+        text-decoration: none;
+        color: #6b7280;
+        padding: 10px 20px;
+        display: flex;
+        align-items: center;
+    }
+
+    .btn-secondary:hover {
+        color: #111827;
+    }
+
+    /* Nutzt deinen vorhandenen btn-primary Style */
+    .btn-primary {
+        /* Dein CSS aus dem Dashboard greift hier bereits, 
+           aber wir stellen sicher, dass es ein Button ist */
+        border: none;
+        cursor: pointer;
+    }
+</style>
 {% endblock %}
